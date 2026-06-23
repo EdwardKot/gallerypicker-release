@@ -45,7 +45,14 @@ async def scan_photos(photo_root: str = None) -> dict:
     to_delete = []        # List of tuples: (photo_id,)
     
     for dirpath, dirnames, filenames in os.walk(root):
+        # Exclude hidden folders (like .trashed, .thumbnails, etc.)
+        dirnames[:] = [d for d in dirnames if not d.startswith('.')]
+        
         for filename in filenames:
+            # Skip hidden files and Android trashed files (which start with a dot, e.g., .trashed-xxx)
+            if filename.startswith('.'):
+                continue
+                
             ext = os.path.splitext(filename)[1].lower()
             if ext not in SUPPORTED_EXTENSIONS:
                 continue

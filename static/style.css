@@ -146,6 +146,18 @@ header {
     gap: 8px;
 }
 
+.date-header {
+    grid-column: 1 / -1;
+    font-size: 0.9rem;
+    font-weight: bold;
+    color: var(--accent);
+    padding: 20px 8px 8px 4px;
+    border-bottom: 1px solid var(--border);
+    margin-top: 12px;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+}
+
 /* ── Thumbnail Card ──────────────────────────────────────── */
 
 .thumb-card {

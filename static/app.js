@@ -21,6 +21,8 @@
         likedSet: new Set(),
         selectedSet: new Set(),
         lastClickedId: null,
+        selectionAnchorId: null,
+        lastRenderedDate: null,
         viewerIsOriginal: false,
         focusedPhotoId: null,
         isLoadingMore: false,
@@ -97,6 +99,7 @@
             $grid.innerHTML = '';
             state.photos = [];
             state.likedSet.clear();
+            state.lastRenderedDate = null;
             $empty.style.display = 'none';
         }
 
@@ -150,9 +153,26 @@
 
     // ── Grid rendering ───────────────────────────────────────
 
+    function formatDate(mtime) {
+        const d = new Date(mtime * 1000);
+        const year = d.getFullYear();
+        const month = String(d.getMonth() + 1).padStart(2, '0');
+        const day = String(d.getDate()).padStart(2, '0');
+        return `${year}-${month}-${day}`;
+    }
+
     function renderGrid(photosToRender) {
         const frag = document.createDocumentFragment();
         photosToRender.forEach(photo => {
+            const dateStr = formatDate(photo.mtime);
+            if (dateStr !== state.lastRenderedDate) {
+                state.lastRenderedDate = dateStr;
+                const header = document.createElement('div');
+                header.className = 'date-header';
+                header.textContent = dateStr;
+                frag.appendChild(header);
+            }
+
             const isSelected = state.selectedSet.has(photo.photo_id);
             const isFocused = state.focusedPhotoId === photo.photo_id;
             const card = document.createElement('div');
@@ -266,6 +286,7 @@
             if (card) {
                 card.classList.add('is-focused');
                 card.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+                state.selectionAnchorId = photoId;
             }
         }
     }
@@ -592,23 +613,18 @@
         const cards = Array.from($grid.querySelectorAll('.thumb-card'));
         const clickedIndex = cards.indexOf(card);
 
-        if (isShift && state.lastClickedId) {
-            const lastCard = $grid.querySelector(`.thumb-card[data-photo-id="${state.lastClickedId}"]`);
-            if (lastCard) {
-                const lastIndex = cards.indexOf(lastCard);
-                const start = Math.min(lastIndex, clickedIndex);
-                const end = Math.max(lastIndex, clickedIndex);
-                const shouldSelect = state.selectedSet.has(state.lastClickedId);
+        if (isShift) {
+            const anchorId = state.selectionAnchorId || state.focusedPhotoId || photoId;
+            const anchorCard = $grid.querySelector(`.thumb-card[data-photo-id="${anchorId}"]`);
+            if (anchorCard) {
+                const anchorIndex = cards.indexOf(anchorCard);
+                const start = Math.min(anchorIndex, clickedIndex);
+                const end = Math.max(anchorIndex, clickedIndex);
                 for (let i = start; i <= end; i++) {
                     const c = cards[i];
                     const id = c.dataset.photoId;
-                    if (shouldSelect) {
-                        state.selectedSet.add(id);
-                        c.classList.add('is-selected');
-                    } else {
-                        state.selectedSet.delete(id);
-                        c.classList.remove('is-selected');
-                    }
+                    state.selectedSet.add(id);
+                    c.classList.add('is-selected');
                 }
             }
         } else {
@@ -619,6 +635,7 @@
                 state.selectedSet.add(photoId);
                 card.classList.add('is-selected');
             }
+            state.selectionAnchorId = photoId;
         }
 
         state.lastClickedId = photoId;
@@ -652,6 +669,7 @@
             handleSelectionClick(card, photoId, e.shiftKey, e.ctrlKey || e.metaKey);
         } else {
             setFocusedCard(photoId);
+            state.selectionAnchorId = photoId;
         }
     });
 
@@ -665,6 +683,7 @@
         $btnClearSelection.addEventListener('click', () => {
             state.selectedSet.clear();
             state.lastClickedId = null;
+            state.selectionAnchorId = null;
             $grid.querySelectorAll('.thumb-card.is-selected').forEach(c => {
                 c.classList.remove('is-selected');
             });
