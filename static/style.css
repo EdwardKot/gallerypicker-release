@@ -373,6 +373,12 @@ header {
     font-size: 13px;
     color: var(--text-secondary);
     flex-shrink: 0;
+    transition: opacity 0.3s;
+}
+
+.viewer-top-bar.hidden {
+    opacity: 0;
+    pointer-events: none;
 }
 
 /* ── Viewer bottom bar ── */
@@ -386,6 +392,12 @@ header {
     background: rgba(0, 0, 0, 0.95);
     border-top: 1px solid #222;
     flex-shrink: 0;
+    transition: opacity 0.3s;
+}
+
+.viewer-bottom-bar.hidden {
+    opacity: 0;
+    pointer-events: none;
 }
 
 .viewer-filename-bottom {

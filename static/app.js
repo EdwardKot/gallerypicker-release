@@ -792,6 +792,31 @@
 
     $viewerClose.addEventListener('click', closeViewer);
 
+    // Viewer top/bottom bar auto-hide
+    let viewerBarTimer = null;
+    const $viewerTopBar = $viewer.querySelector('.viewer-top-bar');
+    const $viewerBottomBar = $viewer.querySelector('.viewer-bottom-bar');
+
+    function showViewerBars() {
+        $viewerTopBar.classList.remove('hidden');
+        $viewerBottomBar.classList.remove('hidden');
+        clearTimeout(viewerBarTimer);
+        viewerBarTimer = setTimeout(hideViewerBars, 3000);
+    }
+
+    function hideViewerBars() {
+        $viewerTopBar.classList.add('hidden');
+        $viewerBottomBar.classList.add('hidden');
+    }
+
+    $viewer.addEventListener('mousemove', showViewerBars);
+    $viewer.addEventListener('touchstart', showViewerBars);
+    document.addEventListener('keydown', (e) => {
+        if (state.viewerActive && ['ArrowLeft','ArrowRight','ArrowUp','ArrowDown','Space','Escape'].includes(e.code)) {
+            showViewerBars();
+        }
+    });
+
     if ($viewerLoadOriginal) {
         $viewerLoadOriginal.addEventListener('click', loadOriginalForViewer);
     }
