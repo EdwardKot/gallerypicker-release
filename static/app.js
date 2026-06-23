@@ -411,6 +411,11 @@
 
     // ── Viewer ───────────────────────────────────────────────
 
+    function setViewerLikedUI(liked) {
+        $viewerLiked.textContent = liked ? '♥ Liked' : '♡ Like';
+        $viewerLiked.className = 'viewer-liked-indicator ' + (liked ? 'is-liked' : '');
+    }
+
     function openViewer(photoId) {
         state.scrollPosition = window.scrollY;
         state.viewerActive = true;
@@ -521,8 +526,7 @@
                 } else {
                     state.likedSet.delete(photoId);
                 }
-                $viewerLiked.textContent = liked ? '♥ Liked' : '';
-                $viewerLiked.className = 'viewer-liked-indicator ' + (liked ? 'is-liked' : '');
+                setViewerLikedUI(liked);
 
                 state.viewerNextIds = photo.next_ids || [];
                 state.viewerPrevIds = photo.prev_ids || [];
@@ -570,8 +574,7 @@
         const photoId = state.viewerPhotoId;
 
         state.likedSet.add(photoId);
-        $viewerLiked.textContent = '♥ Liked';
-        $viewerLiked.className = 'viewer-liked-indicator is-liked';
+        setViewerLikedUI(true);
 
         // Sync grid card state
         const card = $grid.querySelector(`.thumb-card[data-photo-id="${photoId}"]`);
@@ -588,8 +591,7 @@
         const photoId = state.viewerPhotoId;
 
         state.likedSet.delete(photoId);
-        $viewerLiked.textContent = '';
-        $viewerLiked.className = 'viewer-liked-indicator';
+        setViewerLikedUI(false);
 
         const card = $grid.querySelector(`.thumb-card[data-photo-id="${photoId}"]`);
         if (card) card.classList.remove('is-liked');
@@ -598,6 +600,17 @@
             console.error('unlike failed', e)
         );
     }
+
+    $viewerLiked.addEventListener('click', () => {
+        if (!state.viewerPhotoId) return;
+        const photoId = state.viewerPhotoId;
+        const liked = state.likedSet.has(photoId);
+        if (liked) {
+            viewerUnlike();
+        } else {
+            viewerLike();
+        }
+    });
 
     // ── Keyboard handling ────────────────────────────────────
 
