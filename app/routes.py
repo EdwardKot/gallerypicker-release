@@ -1,9 +1,11 @@
 import os
+import io
+import zipfile
 import asyncio
 import mimetypes
 from datetime import datetime, timezone
 from fastapi import APIRouter, Query, HTTPException, Request
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, Response
 from app.database import get_db
 from app.scanner import scan_photos
 from app.thumbnails import generate_thumbnail, get_cache_stats, clear_cache
@@ -319,6 +321,50 @@ async def download_photo(photo_id: str):
         media_type=media_type,
         filename=filename,
         headers={"Content-Disposition": f'attachment; filename="{filename}"'}
+    )
+
+
+@router.post("/api/download-selected")
+async def download_selected(request: Request):
+    """Download selected photos as a ZIP file."""
+    body = await request.json()
+    ids = body.get("ids", [])
+    if not ids:
+        raise HTTPException(status_code=400, detail="No photo IDs provided")
+
+    db = await get_db()
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_STORED) as zf:
+        seen = set()
+        for photo_id in ids:
+            if photo_id in seen:
+                continue
+            seen.add(photo_id)
+            cursor = await db.execute(
+                "SELECT absolute_path, relative_path FROM photos WHERE photo_id = ?",
+                (photo_id,)
+            )
+            row = await cursor.fetchone()
+            if not row:
+                continue
+            abs_path = row[0]
+            if not os.path.exists(abs_path):
+                continue
+            name = os.path.basename(row[1])
+            # Ensure unique arcname
+            base, ext = os.path.splitext(name)
+            n = 2
+            while name in seen:
+                name = f"{base}_{n}{ext}"
+                n += 1
+            seen.add(name)
+            zf.write(abs_path, name)
+    buf.seek(0)
+
+    return Response(
+        content=buf.getvalue(),
+        media_type="application/zip",
+        headers={"Content-Disposition": f'attachment; filename="gallery_{len(ids)}.zip"'}
     )
 
 
