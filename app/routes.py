@@ -1,9 +1,11 @@
 import os
+import io
+import zipfile
 import asyncio
 import mimetypes
 from datetime import datetime, timezone
 from fastapi import APIRouter, Query, HTTPException, Request
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from app.database import get_db
 from app.scanner import scan_photos
 from app.thumbnails import generate_thumbnail, get_cache_stats, clear_cache
@@ -318,6 +320,50 @@ async def download_photo(photo_id: str):
         abs_path,
         media_type=media_type,
         filename=filename,
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'}
+    )
+
+
+@router.post("/api/download-selected")
+async def download_selected(request: Request):
+    """Download selected photos as a ZIP file."""
+    body = await request.json()
+    ids = body.get("ids", [])
+    if not ids:
+        raise HTTPException(status_code=400, detail="No photo IDs provided")
+
+    db = await get_db()
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+        added = set()
+        for photo_id in ids:
+            if photo_id in added:
+                continue
+            added.add(photo_id)
+            cursor = await db.execute(
+                "SELECT absolute_path, relative_path FROM photos WHERE photo_id = ?",
+                (photo_id,)
+            )
+            row = await cursor.fetchone()
+            if not row:
+                continue
+            abs_path, rel_path = row[0], row[1]
+            if not os.path.exists(abs_path):
+                continue
+            arcname = os.path.basename(rel_path)
+            # Deduplicate filenames within the ZIP
+            counter = 1
+            while arcname in zf.namelist():
+                base, ext = os.path.splitext(os.path.basename(rel_path))
+                arcname = f"{base}_{counter}{ext}"
+                counter += 1
+            zf.write(abs_path, arcname)
+
+    buf.seek(0)
+    filename = f"gallery_selected_{len(ids)}.zip"
+    return StreamingResponse(
+        buf,
+        media_type="application/zip",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'}
     )
 

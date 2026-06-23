@@ -635,7 +635,12 @@
                 case 'KeyD':
                     e.preventDefault();
                     if (state.viewerPhotoId) {
-                        triggerDownload(state.viewerPhotoId);
+                        const a = document.createElement('a');
+                        a.href = `/api/download/${state.viewerPhotoId}`;
+                        a.download = '';
+                        document.body.appendChild(a);
+                        a.click();
+                        document.body.removeChild(a);
                     }
                     break;
                 case 'Escape':
@@ -778,7 +783,12 @@
     if ($viewerDownload) {
         $viewerDownload.addEventListener('click', () => {
             if (state.viewerPhotoId) {
-                triggerDownload(state.viewerPhotoId);
+                const a = document.createElement('a');
+                a.href = `/api/download/${state.viewerPhotoId}`;
+                a.download = '';
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
             }
         });
     }
@@ -833,61 +843,83 @@
         }
     });
 
-    function triggerDownload(photoId) {
-        window.open(`/api/download/${photoId}`, '_blank');
+    async function downloadSelected() {
+        if (state.selectedSet.size === 0) return;
+        const ids = Array.from(state.selectedSet);
+        $btnDownload.disabled = true;
+        showToast(`Generating ZIP for ${ids.length} photos…`);
+        try {
+            const resp = await fetch('/api/download-selected', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ ids })
+            });
+            if (!resp.ok) {
+                const err = await resp.json().catch(() => ({}));
+                throw new Error(err.detail || `HTTP ${resp.status}`);
+            }
+            const blob = await resp.blob();
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `gallery_selected_${ids.length}.zip`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+            showToast(`Downloaded ${ids.length} photos as ZIP`);
+        } catch (e) {
+            console.error('downloadSelected', e);
+            showToast('Download failed: ' + e.message);
+        } finally {
+            $btnDownload.disabled = false;
+        }
     }
 
-    // Download: selected first, then liked fallback
-    $btnDownload.addEventListener('click', async () => {
-        if (state.selectedSet.size > 0) {
-            const selectedList = Array.from(state.selectedSet);
-            showToast(`Downloading ${selectedList.length} selected photos…`);
-            for (let i = 0; i < selectedList.length; i++) {
-                const a = document.createElement('a');
-                a.href = `/api/download/${selectedList[i]}`;
-                a.download = '';
-                document.body.appendChild(a);
-                a.click();
-                document.body.removeChild(a);
-                // Brief yield so each download has time to start from its own click context
-                if (i < selectedList.length - 1) {
-                    await new Promise(r => setTimeout(r, 200));
-                }
-            }
-            return;
-        }
-
-        if (state.counts.liked === 0) {
-            showToast('No liked photos to download');
-            return;
-        }
+    async function downloadLiked() {
         $btnDownload.disabled = true;
         showToast('Requesting liked list…');
         try {
             const data = await apiJson('/api/photos?filter=liked&page_size=10000');
-            const likedList = data.photos || [];
-            if (likedList.length === 0) {
+            const likedIds = (data.photos || []).map(p => p.photo_id);
+            if (likedIds.length === 0) {
                 showToast('No liked photos found');
                 $btnDownload.disabled = false;
                 return;
             }
-            showToast(`Downloading ${likedList.length} photos…`);
-            for (let i = 0; i < likedList.length; i++) {
-                const a = document.createElement('a');
-                a.href = `/api/download/${likedList[i].photo_id}`;
-                a.download = '';
-                document.body.appendChild(a);
-                a.click();
-                document.body.removeChild(a);
-                if (i < likedList.length - 1) {
-                    await new Promise(r => setTimeout(r, 200));
-                }
+            showToast(`Generating ZIP for ${likedIds.length} photos…`);
+            const resp = await fetch('/api/download-selected', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ ids: likedIds })
+            });
+            if (!resp.ok) {
+                const err = await resp.json().catch(() => ({}));
+                throw new Error(err.detail || `HTTP ${resp.status}`);
             }
+            const blob = await resp.blob();
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `gallery_liked_${likedIds.length}.zip`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+            showToast(`Downloaded ${likedIds.length} photos as ZIP`);
         } catch (e) {
-            console.error('Download liked failed', e);
-            showToast('Download failed');
+            console.error('downloadLiked', e);
+            showToast('Download failed: ' + e.message);
         } finally {
             $btnDownload.disabled = false;
+        }
+    }
+
+    $btnDownload.addEventListener('click', async () => {
+        if (state.selectedSet.size > 0) {
+            await downloadSelected();
+        } else {
+            await downloadLiked();
         }
     });
 
