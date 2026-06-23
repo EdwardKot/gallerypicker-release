@@ -840,19 +840,12 @@
     // Download: selected first, then liked fallback
     $btnDownload.addEventListener('click', async () => {
         if (state.selectedSet.size > 0) {
-            $btnDownload.disabled = true;
             const selectedList = Array.from(state.selectedSet);
             showToast(`Downloading ${selectedList.length} selected photos…`);
-            try {
-                for (let i = 0; i < selectedList.length; i++) {
-                    triggerDownload(selectedList[i]);
-                    await new Promise(resolve => setTimeout(resolve, 150));
-                }
-            } catch (e) {
-                console.error('Download selected failed', e);
-                showToast('Download failed');
-            } finally {
-                $btnDownload.disabled = false;
+            // Open all downloads synchronously so each inherits the user gesture
+            // — browsers won't block them as popups.
+            for (let i = 0; i < selectedList.length; i++) {
+                window.open(`/api/download/${selectedList[i]}`, '_blank');
             }
             return;
         }
@@ -873,8 +866,7 @@
             }
             showToast(`Downloading ${likedList.length} photos…`);
             for (let i = 0; i < likedList.length; i++) {
-                triggerDownload(likedList[i].photo_id);
-                await new Promise(resolve => setTimeout(resolve, 150));
+                window.open(`/api/download/${likedList[i].photo_id}`, '_blank');
             }
         } catch (e) {
             console.error('Download liked failed', e);
