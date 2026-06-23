@@ -268,7 +268,7 @@ header {
     left: 0;
     right: 0;
     padding: 4px 6px;
-    background: linear-gradient(transparent, rgba(0,0,0,0.75));
+    background: linear-gradient(transparent, rgba(0,0,0,0.85));
     font-size: 11px;
     color: #ccc;
     white-space: nowrap;
