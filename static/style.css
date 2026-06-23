@@ -351,7 +351,6 @@ header {
     justify-content: center;
     overflow: hidden;
     min-height: 0;
-    padding-top: 48px;
 }
 
 .viewer-image-container img {
@@ -360,42 +359,43 @@ header {
     object-fit: contain;
     user-select: none;
     -webkit-user-drag: none;
-    cursor: zoom-in;
 }
 
-.viewer-image-container.is-zoomed {
-    display: block;
-    overflow: auto;
-}
+/* ── Viewer top bar ── */
 
-.viewer-image-container.is-zoomed img {
-    max-width: none;
-    max-height: none;
-    display: block;
-    margin: 0 auto;
-    cursor: zoom-out;
-}
-
-.viewer-info {
+.viewer-top-bar {
     display: flex;
     align-items: center;
     justify-content: center;
     gap: 24px;
     padding: 10px 16px;
-    background: rgba(0, 0, 0, 0.85);
+    background: rgba(0, 0, 0, 0.95);
     font-size: 13px;
     color: var(--text-secondary);
+    flex-shrink: 0;
+}
+
+/* ── Viewer bottom bar ── */
+
+.viewer-bottom-bar {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    padding: 10px 16px;
+    background: rgba(0, 0, 0, 0.95);
     border-top: 1px solid #222;
+    flex-shrink: 0;
 }
 
 .viewer-load-original-btn,
 .viewer-download-btn {
-    padding: 4px 10px;
+    padding: 4px 12px;
     border: 1px solid var(--border);
     border-radius: 4px;
     background: rgba(255, 255, 255, 0.05);
     color: var(--text-primary);
-    font-size: 11px;
+    font-size: 12px;
     cursor: pointer;
     transition: background 0.15s, color 0.15s, border-color 0.15s;
 }

@@ -39,15 +39,17 @@
     </main>
 
     <div id="viewer" class="viewer" style="display:none">
+        <div class="viewer-top-bar">
+            <span id="viewer-filename"></span>
+            <span id="viewer-position"></span>
+            <span id="viewer-liked" class="viewer-liked-indicator"></span>
+        </div>
         <div class="viewer-image-container">
             <img id="viewer-img" src="" alt="Photo viewer">
         </div>
-        <div class="viewer-info">
-            <span id="viewer-filename"></span>
-            <span id="viewer-position"></span>
+        <div class="viewer-bottom-bar">
             <button id="viewer-load-original" class="viewer-load-original-btn" title="Load high-res original image (2 or O)">Load Original</button>
             <button id="viewer-download" class="viewer-download-btn" title="Download original image (D)">Download</button>
-            <span id="viewer-liked" class="viewer-liked-indicator"></span>
         </div>
         <button id="viewer-close" class="viewer-close-btn" title="Close (Esc)">✕</button>
     </div>
