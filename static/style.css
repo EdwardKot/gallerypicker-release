@@ -280,39 +280,6 @@ header {
 
 /* ── Pagination ──────────────────────────────────────────── */
 
-.pagination {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 12px;
-    padding: 20px 0;
-}
-
-.pagination button {
-    padding: 8px 16px;
-    border: 1px solid var(--border);
-    border-radius: 4px;
-    background: transparent;
-    color: var(--text-primary);
-    font-size: 13px;
-    cursor: pointer;
-    transition: background 0.15s;
-}
-
-.pagination button:hover:not(:disabled) {
-    background: var(--bg-hover);
-}
-
-.pagination button:disabled {
-    opacity: 0.3;
-    cursor: default;
-}
-
-.pagination .page-info {
-    font-size: 13px;
-    color: var(--text-secondary);
-}
-
 /* ── Loading / Empty ─────────────────────────────────────── */
 
 .loading {
