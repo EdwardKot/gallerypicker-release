@@ -364,6 +364,7 @@ header {
     object-fit: contain;
     user-select: none;
     -webkit-user-drag: none;
+    pointer-events: none;
 }
 
 /* ── Viewer top bar ── */
