@@ -892,7 +892,7 @@
         iframe.style.display = 'none';
         iframe.src = `/api/download/${id}`;
         document.body.appendChild(iframe);
-        setTimeout(() => document.body.removeChild(iframe), 5000);
+        setTimeout(() => { if (iframe.parentNode) iframe.parentNode.removeChild(iframe); }, 5000);
     }
 
     $btnDownload.addEventListener('click', () => {
