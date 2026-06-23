@@ -41,6 +41,8 @@
     const $viewerPosition = document.getElementById('viewer-position');
     const $viewerLiked = document.getElementById('viewer-liked');
     const $viewerFilenameBottom = document.getElementById('viewer-filename-bottom');
+    const $viewerBtnPrev = document.getElementById('viewer-btn-prev');
+    const $viewerBtnNext = document.getElementById('viewer-btn-next');
     const $viewerClose = document.getElementById('viewer-close');
     const $toast = document.getElementById('toast');
     const $thumbSlider = document.getElementById('thumb-size-slider');
@@ -614,6 +616,9 @@
             viewerLike();
         }
     });
+
+    $viewerBtnPrev.addEventListener('click', viewerPrev);
+    $viewerBtnNext.addEventListener('click', viewerNext);
 
     // ── Keyboard handling ────────────────────────────────────
 

@@ -48,9 +48,15 @@
             <img id="viewer-img" src="" alt="Photo viewer">
         </div>
         <div class="viewer-bottom-bar">
+            <div class="viewer-bottom-left">
+                <button id="viewer-load-original" class="viewer-load-original-btn" title="Load high-res original image (2 or O)">Load Original</button>
+                <button id="viewer-download" class="viewer-download-btn" title="Download original image (D)">Download</button>
+            </div>
             <span id="viewer-filename-bottom" class="viewer-filename-bottom"></span>
-            <button id="viewer-load-original" class="viewer-load-original-btn" title="Load high-res original image (2 or O)">Load Original</button>
-            <button id="viewer-download" class="viewer-download-btn" title="Download original image (D)">Download</button>
+            <div class="viewer-bottom-right">
+                <button class="viewer-nav-btn" id="viewer-btn-prev" title="Previous (←)">←</button>
+                <button class="viewer-nav-btn" id="viewer-btn-next" title="Next (→)">→</button>
+            </div>
         </div>
         <button id="viewer-close" class="viewer-close-btn" title="Close (Esc)">✕</button>
     </div>
