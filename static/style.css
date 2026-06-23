@@ -388,6 +388,15 @@ header {
     flex-shrink: 0;
 }
 
+.viewer-filename-bottom {
+    font-size: 12px;
+    color: var(--text-secondary);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 40vw;
+}
+
 .viewer-load-original-btn,
 .viewer-download-btn {
     padding: 4px 12px;
