@@ -103,6 +103,8 @@ header {
     cursor: pointer;
     white-space: nowrap;
     transition: background 0.15s, color 0.15s;
+    min-height: 44px;
+    min-width: 44px;
 }
 
 .tool-btn:hover {
@@ -162,11 +164,12 @@ header {
 }
 
 .date-checkbox {
-    width: 15px;
-    height: 15px;
+    width: 22px;
+    height: 22px;
     cursor: pointer;
     accent-color: var(--accent);
     margin: 0;
+    flex-shrink: 0;
 }
 
 /* ── Thumbnail Card ──────────────────────────────────────── */
@@ -180,6 +183,7 @@ header {
     cursor: pointer;
     transition: border-color 0.15s, transform 0.1s;
     aspect-ratio: 1 / 1;
+    -webkit-tap-highlight-color: transparent;
 }
 
 .thumb-card:hover {
