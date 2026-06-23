@@ -843,83 +843,36 @@
         }
     });
 
-    async function downloadSelected() {
-        if (state.selectedSet.size === 0) return;
-        const ids = Array.from(state.selectedSet);
-        $btnDownload.disabled = true;
-        showToast(`Generating ZIP for ${ids.length} photos…`);
-        try {
-            const resp = await fetch('/api/download-selected', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ ids })
-            });
-            if (!resp.ok) {
-                const err = await resp.json().catch(() => ({}));
-                throw new Error(err.detail || `HTTP ${resp.status}`);
-            }
-            const blob = await resp.blob();
-            const url = URL.createObjectURL(blob);
+    function downloadBatch(ids) {
+        ids.forEach(id => {
             const a = document.createElement('a');
-            a.href = url;
-            a.download = `gallery_selected_${ids.length}.zip`;
+            a.href = `/api/download/${id}`;
+            a.download = '';
             document.body.appendChild(a);
             a.click();
             document.body.removeChild(a);
-            URL.revokeObjectURL(url);
-            showToast(`Downloaded ${ids.length} photos as ZIP`);
-        } catch (e) {
-            console.error('downloadSelected', e);
-            showToast('Download failed: ' + e.message);
-        } finally {
-            $btnDownload.disabled = false;
-        }
+        });
     }
 
-    async function downloadLiked() {
-        $btnDownload.disabled = true;
-        showToast('Requesting liked list…');
-        try {
-            const data = await apiJson('/api/photos?filter=liked&page_size=10000');
-            const likedIds = (data.photos || []).map(p => p.photo_id);
-            if (likedIds.length === 0) {
-                showToast('No liked photos found');
-                $btnDownload.disabled = false;
-                return;
-            }
-            showToast(`Generating ZIP for ${likedIds.length} photos…`);
-            const resp = await fetch('/api/download-selected', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ ids: likedIds })
-            });
-            if (!resp.ok) {
-                const err = await resp.json().catch(() => ({}));
-                throw new Error(err.detail || `HTTP ${resp.status}`);
-            }
-            const blob = await resp.blob();
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = `gallery_liked_${likedIds.length}.zip`;
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-            URL.revokeObjectURL(url);
-            showToast(`Downloaded ${likedIds.length} photos as ZIP`);
-        } catch (e) {
-            console.error('downloadLiked', e);
-            showToast('Download failed: ' + e.message);
-        } finally {
-            $btnDownload.disabled = false;
-        }
-    }
-
-    $btnDownload.addEventListener('click', async () => {
+    $btnDownload.addEventListener('click', () => {
         if (state.selectedSet.size > 0) {
-            await downloadSelected();
+            const ids = Array.from(state.selectedSet);
+            showToast(`Downloading ${ids.length} selected photos…`);
+            downloadBatch(ids);
         } else {
-            await downloadLiked();
+            showToast('Requesting liked list…');
+            apiJson('/api/photos?filter=liked&page_size=10000').then(data => {
+                const ids = (data.photos || []).map(p => p.photo_id);
+                if (ids.length === 0) {
+                    showToast('No liked photos found');
+                    return;
+                }
+                showToast(`Downloading ${ids.length} liked photos…`);
+                downloadBatch(ids);
+            }).catch(e => {
+                console.error('downloadLiked', e);
+                showToast('Download failed');
+            });
         }
     });
 
