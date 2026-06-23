@@ -141,7 +141,6 @@
             const img = document.createElement('img');
             img.dataset.src = `/api/thumbnail/${photo.photo_id}?size=200`;
             img.alt = photo.filename || '';
-            img.loading = 'lazy';
             img.style.display = 'none';
             card.appendChild(img);
 
@@ -184,6 +183,11 @@
                             img.style.display = '';
                             const ph = card.querySelector('.thumb-placeholder');
                             if (ph) ph.remove();
+                        };
+                        img.onerror = () => {
+                            const ph = card.querySelector('.thumb-placeholder');
+                            if (ph) ph.textContent = '⚠';
+                            console.error('Thumbnail load failed:', targetSrc);
                         };
                         img.src = targetSrc;
                     }
