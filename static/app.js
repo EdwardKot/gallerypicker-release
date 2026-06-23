@@ -889,48 +889,34 @@
         }
     });
 
-    async function downloadBatch(ids) {
-        const resp = await fetch('/api/download-selected', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ ids })
-        });
-        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-        const blob = await resp.blob();
-        const url = URL.createObjectURL(blob);
+    function downloadOne(id) {
         const a = document.createElement('a');
-        a.href = url;
-        a.download = `gallery_${ids.length}.zip`;
+        a.href = `/api/download/${id}`;
+        a.download = '';
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);
-        URL.revokeObjectURL(url);
     }
 
-    $btnDownload.addEventListener('click', async () => {
+    $btnDownload.addEventListener('click', () => {
         if (state.selectedSet.size > 0) {
             const ids = Array.from(state.selectedSet);
-            showToast(`Downloading ${ids.length} selected photos as ZIP…`);
-            try {
-                await downloadBatch(ids);
-            } catch (e) {
-                console.error(e);
-                showToast('Download failed');
-            }
+            showToast(`Downloading ${ids.length} selected photos…`);
+            ids.forEach(downloadOne);
         } else {
-            try {
-                const data = await apiJson('/api/photos?filter=liked&page_size=10000');
+            showToast('Requesting liked list…');
+            apiJson('/api/photos?filter=liked&page_size=10000').then(data => {
                 const ids = (data.photos || []).map(p => p.photo_id);
                 if (ids.length === 0) {
                     showToast('No liked photos found');
                     return;
                 }
-                showToast(`Downloading ${ids.length} liked photos as ZIP…`);
-                await downloadBatch(ids);
-            } catch (e) {
-                console.error(e);
+                showToast(`Downloading ${ids.length} liked photos…`);
+                ids.forEach(downloadOne);
+            }).catch(e => {
+                console.error('downloadLiked', e);
                 showToast('Download failed');
-            }
+            });
         }
     });
 
