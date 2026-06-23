@@ -48,7 +48,6 @@
     const $viewerDownload = document.getElementById('viewer-download');
     const $countAll = document.getElementById('count-all');
     const $countLiked = document.getElementById('count-liked');
-    const $countUnliked = document.getElementById('count-unliked');
 
     // ── Helpers ──────────────────────────────────────────────
 
@@ -83,7 +82,6 @@
             state.counts = data;
             $countAll.textContent = data.total ?? 0;
             $countLiked.textContent = data.liked ?? 0;
-            $countUnliked.textContent = data.unliked ?? 0;
         } catch (e) {
             console.error('fetchCounts', e);
         }
