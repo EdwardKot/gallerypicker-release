@@ -351,6 +351,7 @@ header {
     justify-content: center;
     overflow: hidden;
     min-height: 0;
+    padding-top: 48px;
 }
 
 .viewer-image-container img {
@@ -421,15 +422,6 @@ header {
 
 .viewer-liked-indicator.is-unliked {
     color: var(--text-secondary);
-}
-
-.viewer-controls-hint {
-    padding: 6px 16px;
-    background: rgba(0, 0, 0, 0.9);
-    text-align: center;
-    font-size: 11px;
-    color: #555;
-    border-top: 1px solid #1a1a1a;
 }
 
 .viewer-close-btn {

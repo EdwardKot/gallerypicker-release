@@ -320,6 +320,18 @@
         }
     }
 
+    function getGridColumns() {
+        const cards = $grid.querySelectorAll('.thumb-card');
+        if (cards.length < 2) return 1;
+        const firstTop = cards[0].offsetTop;
+        let cols = 1;
+        for (let i = 1; i < Math.min(cards.length, 30); i++) {
+            if (cards[i].offsetTop === firstTop) cols++;
+            else break;
+        }
+        return cols;
+    }
+
     function navigateGrid(direction) {
         const cards = Array.from($grid.querySelectorAll('.thumb-card'));
         if (cards.length === 0) return;
@@ -341,9 +353,7 @@
         } else if (direction === 'ArrowLeft') {
             newIndex = Math.max(currentIndex - 1, 0);
         } else if (direction === 'ArrowDown' || direction === 'ArrowUp') {
-            // Calculate columns per row from CSS grid
-            const gridStyle = getComputedStyle($grid);
-            const cols = gridStyle.gridTemplateColumns.split(' ').length;
+            const cols = getGridColumns();
             if (direction === 'ArrowDown') {
                 newIndex = Math.min(currentIndex + cols, cards.length - 1);
             } else {
@@ -692,7 +702,7 @@
 
     // ── Click handlers ───────────────────────────────────────
 
-    // Grid: single click = focus, shift/cmd click = select
+    // Grid: single click = focus, double click = open viewer, shift/cmd click = select
     $grid.addEventListener('click', (e) => {
         const dateCheckbox = e.target.closest('.date-checkbox');
         if (dateCheckbox) {
@@ -728,6 +738,15 @@
             setFocusedCard(photoId);
             state.selectionAnchorId = photoId;
         }
+    });
+
+    // Double click on a thumbnail opens the viewer
+    $grid.addEventListener('dblclick', (e) => {
+        const card = e.target.closest('.thumb-card');
+        if (!card) return;
+        const photoId = card.dataset.photoId;
+        if (!photoId) return;
+        openViewer(photoId);
     });
 
     $viewerClose.addEventListener('click', closeViewer);
