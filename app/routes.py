@@ -317,8 +317,7 @@ async def download_photo(photo_id: str):
     return FileResponse(
         abs_path,
         media_type=media_type,
-        filename=filename,
-        headers={"Content-Disposition": f'attachment; filename="{filename}"'}
+        filename=filename
     )
 
 
