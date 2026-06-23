@@ -505,8 +505,13 @@ header {
     display: flex;
     align-items: center;
     justify-content: center;
-    transition: background 0.15s, color 0.15s;
+    transition: background 0.15s, color 0.15s, opacity 0.3s;
     z-index: 1001;
+}
+
+.viewer-close-btn.hidden {
+    opacity: 0;
+    pointer-events: none;
 }
 
 .viewer-close-btn:hover {

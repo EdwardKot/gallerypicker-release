@@ -795,10 +795,12 @@
     let viewerBarTimer = null;
     const $viewerTopBar = $viewer.querySelector('.viewer-top-bar');
     const $viewerBottomBar = $viewer.querySelector('.viewer-bottom-bar');
+    const $viewerCloseBtn = $viewer.querySelector('.viewer-close-btn');
 
     function showViewerBars() {
         $viewerTopBar.classList.remove('hidden');
         $viewerBottomBar.classList.remove('hidden');
+        $viewerCloseBtn.classList.remove('hidden');
         clearTimeout(viewerBarTimer);
         viewerBarTimer = setTimeout(hideViewerBars, 3000);
     }
@@ -806,6 +808,7 @@
     function hideViewerBars() {
         $viewerTopBar.classList.add('hidden');
         $viewerBottomBar.classList.add('hidden');
+        $viewerCloseBtn.classList.add('hidden');
     }
 
     $viewer.addEventListener('mousemove', showViewerBars);
