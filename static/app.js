@@ -22,11 +22,13 @@
         selectedSet: new Set(),
         lastClickedId: null,
         viewerIsOriginal: false,
+        focusedPhotoId: null,
+        isLoadingMore: false,
+        hasMorePages: true,
     };
 
     // ── DOM refs ─────────────────────────────────────────────
     const $grid = document.getElementById('photo-grid');
-    const $pagination = document.getElementById('pagination');
     const $loading = document.getElementById('loading');
     const $empty = document.getElementById('empty-state');
     const $viewer = document.getElementById('viewer');
@@ -84,53 +86,80 @@
         }
     }
 
+    // ── Photos loading (infinite scroll) ─────────────────────
 
+    async function fetchPhotos(append) {
+        if (state.isLoadingMore) return;
 
-    // ── Photos page ──────────────────────────────────────────
+        if (!append) {
+            state.currentPage = 1;
+            state.hasMorePages = true;
+            $grid.innerHTML = '';
+            state.photos = [];
+            state.likedSet.clear();
+            $empty.style.display = 'none';
+        }
 
-    async function fetchPhotos() {
         setLoading(true);
-        $grid.innerHTML = '';
-        $empty.style.display = 'none';
+        state.isLoadingMore = true;
+
         try {
             const data = await apiJson(
                 `/api/photos?filter=${state.currentFilter}&sort=${state.currentSort}&page=${state.currentPage}&page_size=${state.pageSize}`
             );
-            state.photos = data.photos ?? [];
+            const newPhotos = data.photos ?? [];
+
             state.totalPhotos = data.total ?? 0;
             state.totalPages = data.total_pages ?? Math.ceil(state.totalPhotos / state.pageSize);
+            state.hasMorePages = state.currentPage < state.totalPages;
 
-            // Build liked set for quick lookup
-            state.likedSet.clear();
-            state.photos.forEach(p => {
+            newPhotos.forEach(p => {
                 if (p.liked) state.likedSet.add(p.photo_id);
             });
+
+            if (append) {
+                state.photos = state.photos.concat(newPhotos);
+            } else {
+                state.photos = newPhotos;
+            }
 
             if (state.photos.length === 0) {
                 $empty.style.display = '';
             } else {
-                renderGrid();
-                observeThumbnails();
+                renderGrid(newPhotos);
+                observeNewThumbnails();
             }
-            renderPagination();
         } catch (e) {
             console.error('fetchPhotos', e);
             showToast('Failed to load photos');
         } finally {
             setLoading(false);
+            state.isLoadingMore = false;
+        }
+    }
+
+    function loadMoreIfNeeded() {
+        if (state.isLoadingMore || !state.hasMorePages || state.viewerActive) return;
+        const scrollBottom = window.innerHeight + window.scrollY;
+        const docHeight = document.documentElement.scrollHeight;
+        if (docHeight - scrollBottom < 600) {
+            state.currentPage++;
+            fetchPhotos(true);
         }
     }
 
     // ── Grid rendering ───────────────────────────────────────
 
-    function renderGrid() {
+    function renderGrid(photosToRender) {
         const frag = document.createDocumentFragment();
-        state.photos.forEach(photo => {
+        photosToRender.forEach(photo => {
             const isSelected = state.selectedSet.has(photo.photo_id);
+            const isFocused = state.focusedPhotoId === photo.photo_id;
             const card = document.createElement('div');
-            card.className = 'thumb-card' + 
-                (photo.liked ? ' is-liked' : '') + 
-                (isSelected ? ' is-selected' : '');
+            card.className = 'thumb-card' +
+                (photo.liked ? ' is-liked' : '') +
+                (isSelected ? ' is-selected' : '') +
+                (isFocused ? ' is-focused' : '');
             card.dataset.photoId = photo.photo_id;
 
             const placeholder = document.createElement('div');
@@ -168,76 +197,42 @@
 
     let observer = null;
 
-    function observeThumbnails() {
-        if (observer) observer.disconnect();
-        observer = new IntersectionObserver(
-            (entries) => {
-                entries.forEach(entry => {
-                    if (!entry.isIntersecting) return;
-                    const card = entry.target;
-                    const img = card.querySelector('img');
-                    if (img && img.dataset.src) {
-                        const targetSrc = img.dataset.src;
-                        delete img.dataset.src;
-                        img.onload = () => {
-                            img.style.display = '';
-                            const ph = card.querySelector('.thumb-placeholder');
-                            if (ph) ph.remove();
-                        };
-                        img.onerror = () => {
-                            const ph = card.querySelector('.thumb-placeholder');
-                            if (ph) ph.textContent = '⚠';
-                            console.error('Thumbnail load failed:', targetSrc);
-                        };
-                        img.src = targetSrc;
-                    }
-                    observer.unobserve(card);
-                });
-            },
-            { rootMargin: '200px' }
-        );
-        $grid.querySelectorAll('.thumb-card').forEach(c => observer.observe(c));
-    }
-
-    // ── Pagination ───────────────────────────────────────────
-
-    function renderPagination() {
-        if (state.totalPages <= 1) {
-            $pagination.innerHTML = '';
-            return;
+    function observeNewThumbnails() {
+        if (!observer) {
+            observer = new IntersectionObserver(
+                (entries) => {
+                    entries.forEach(entry => {
+                        if (!entry.isIntersecting) return;
+                        const card = entry.target;
+                        const img = card.querySelector('img');
+                        if (img && img.dataset.src) {
+                            const targetSrc = img.dataset.src;
+                            delete img.dataset.src;
+                            img.onload = () => {
+                                img.style.display = '';
+                                const ph = card.querySelector('.thumb-placeholder');
+                                if (ph) ph.remove();
+                            };
+                            img.onerror = () => {
+                                const ph = card.querySelector('.thumb-placeholder');
+                                if (ph) ph.textContent = '⚠';
+                                console.error('Thumbnail load failed:', targetSrc);
+                            };
+                            img.src = targetSrc;
+                        }
+                        observer.unobserve(card);
+                    });
+                },
+                { rootMargin: '200px' }
+            );
         }
-        $pagination.innerHTML = '';
-
-        const prev = document.createElement('button');
-        prev.textContent = '← Previous';
-        prev.disabled = state.currentPage <= 1;
-        prev.addEventListener('click', () => {
-            if (state.currentPage > 1) {
-                state.currentPage--;
-                loadCurrentPage();
+        // Only observe cards that still have data-src
+        $grid.querySelectorAll('.thumb-card').forEach(c => {
+            const img = c.querySelector('img');
+            if (img && img.dataset.src) {
+                observer.observe(c);
             }
         });
-
-        const info = document.createElement('span');
-        info.className = 'page-info';
-        info.textContent = `Page ${state.currentPage} of ${state.totalPages}`;
-
-        const next = document.createElement('button');
-        next.textContent = 'Next →';
-        next.disabled = state.currentPage >= state.totalPages;
-        next.addEventListener('click', () => {
-            if (state.currentPage < state.totalPages) {
-                state.currentPage++;
-                loadCurrentPage();
-            }
-        });
-
-        $pagination.append(prev, info, next);
-    }
-
-    function loadCurrentPage() {
-        window.scrollTo(0, 0);
-        fetchPhotos();
     }
 
     // ── Thumb size ───────────────────────────────────────────
@@ -251,11 +246,88 @@
     function setFilter(filter) {
         if (filter === state.currentFilter) return;
         state.currentFilter = filter;
-        state.currentPage = 1;
+        state.focusedPhotoId = null;
         document.querySelectorAll('.filter-btn').forEach(btn => {
             btn.classList.toggle('active', btn.dataset.filter === filter);
         });
         fetchPhotos();
+    }
+
+    // ── Focus (grid navigation) ──────────────────────────────
+
+    function setFocusedCard(photoId) {
+        const oldFocused = $grid.querySelector('.thumb-card.is-focused');
+        if (oldFocused) oldFocused.classList.remove('is-focused');
+
+        state.focusedPhotoId = photoId;
+
+        if (photoId) {
+            const card = $grid.querySelector(`.thumb-card[data-photo-id="${photoId}"]`);
+            if (card) {
+                card.classList.add('is-focused');
+                card.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+            }
+        }
+    }
+
+    function navigateGrid(direction) {
+        const cards = Array.from($grid.querySelectorAll('.thumb-card'));
+        if (cards.length === 0) return;
+
+        let currentIndex = state.focusedPhotoId
+            ? cards.findIndex(c => c.dataset.photoId === state.focusedPhotoId)
+            : -1;
+
+        // If no focus yet, focus first card
+        if (currentIndex === -1) {
+            setFocusedCard(cards[0].dataset.photoId);
+            return;
+        }
+
+        let newIndex = currentIndex;
+
+        if (direction === 'ArrowRight') {
+            newIndex = Math.min(currentIndex + 1, cards.length - 1);
+        } else if (direction === 'ArrowLeft') {
+            newIndex = Math.max(currentIndex - 1, 0);
+        } else if (direction === 'ArrowDown' || direction === 'ArrowUp') {
+            // Calculate columns per row from CSS grid
+            const gridStyle = getComputedStyle($grid);
+            const cols = gridStyle.gridTemplateColumns.split(' ').length;
+            if (direction === 'ArrowDown') {
+                newIndex = Math.min(currentIndex + cols, cards.length - 1);
+            } else {
+                newIndex = Math.max(currentIndex - cols, 0);
+            }
+        }
+
+        if (newIndex !== currentIndex) {
+            setFocusedCard(cards[newIndex].dataset.photoId);
+            // Trigger infinite scroll when nearing end
+            if (newIndex > cards.length - 20 && state.hasMorePages) {
+                loadMoreIfNeeded();
+            }
+        }
+    }
+
+    function gridLike(photoId) {
+        if (!photoId) return;
+        state.likedSet.add(photoId);
+        const card = $grid.querySelector(`.thumb-card[data-photo-id="${photoId}"]`);
+        if (card) card.classList.add('is-liked');
+        api(`/api/like/${photoId}`, { method: 'POST' }).catch(e => console.error('like failed', e));
+        fetchCounts();
+        showToast('♥ Liked');
+    }
+
+    function gridUnlike(photoId) {
+        if (!photoId) return;
+        state.likedSet.delete(photoId);
+        const card = $grid.querySelector(`.thumb-card[data-photo-id="${photoId}"]`);
+        if (card) card.classList.remove('is-liked');
+        api(`/api/unlike/${photoId}`, { method: 'POST' }).catch(e => console.error('unlike failed', e));
+        fetchCounts();
+        showToast('♡ Unliked');
     }
 
     // ── Viewer ───────────────────────────────────────────────
@@ -289,11 +361,8 @@
         $viewerImg.src = '';
         document.body.style.overflow = '';
 
-        // Refresh the grid to reflect any like changes
         fetchCounts();
-        fetchPhotos().then(() => {
-            window.scrollTo(0, state.scrollPosition);
-        });
+        window.scrollTo(0, state.scrollPosition);
     }
 
     function showViewerPhoto(photoId) {
@@ -306,8 +375,11 @@
             $viewerLoadOriginal.disabled = false;
         }
 
-        // Show thumbnail (1024px) for speed
-        $viewerImg.src = `/api/thumbnail/${photoId}`;
+        // Show loading state, then load 1024px thumbnail
+        $viewerImg.style.opacity = '0.4';
+        const thumbUrl = `/api/thumbnail/${photoId}`;
+        $viewerImg.onload = () => { $viewerImg.style.opacity = '1'; };
+        $viewerImg.src = thumbUrl;
 
         updateViewerInfo(photoId);
     }
@@ -316,7 +388,7 @@
         if (!state.viewerPhotoId || state.viewerIsOriginal) return;
 
         if ($viewerLoadOriginal) {
-            $viewerLoadOriginal.textContent = 'Loading...';
+            $viewerLoadOriginal.textContent = 'Loading…';
             $viewerLoadOriginal.disabled = true;
         }
 
@@ -327,10 +399,10 @@
                 $viewerImg.src = orig.src;
                 state.viewerIsOriginal = true;
                 if ($viewerLoadOriginal) {
-                    $viewerLoadOriginal.textContent = 'Original Loaded';
+                    $viewerLoadOriginal.textContent = 'Original ✓';
                     $viewerLoadOriginal.disabled = true;
                 }
-                showToast('Original image loaded');
+                showToast('Original loaded');
             }
         };
         orig.onerror = () => {
@@ -339,7 +411,7 @@
                     $viewerLoadOriginal.textContent = 'Load Original';
                     $viewerLoadOriginal.disabled = false;
                 }
-                showToast('Failed to load original image');
+                showToast('Failed to load original');
             }
         };
         orig.src = `/api/original/${state.viewerPhotoId}`;
@@ -348,13 +420,13 @@
     function updateViewerInfo(photoId) {
         const expectedId = photoId;
         const url = `/api/photo/${photoId}?filter=${state.currentFilter}&sort=${state.currentSort}`;
-        
+
         apiJson(url)
             .then(photo => {
                 if (state.viewerPhotoId !== expectedId) return;
 
                 $viewerFilename.textContent = photo.filename || photoId;
-                
+
                 if (photo.index !== undefined && photo.index !== -1) {
                     state.viewerIndex = photo.index - 1;
                     state.totalPhotos = photo.total;
@@ -372,10 +444,8 @@
                 $viewerLiked.textContent = liked ? '♥ Liked' : '♡ Unliked';
                 $viewerLiked.className = 'viewer-liked-indicator ' + (liked ? 'is-liked' : 'is-unliked');
 
-                // Update neighbor lists
                 state.viewerNextIds = photo.next_ids || [];
                 state.viewerPrevIds = photo.prev_ids || [];
-
                 preloadNearbyList(state.viewerPrevIds, state.viewerNextIds);
             })
             .catch(err => {
@@ -392,12 +462,8 @@
         if (nextIds && nextIds.length > 0) toPreload.push(nextIds[0]);
         if (nextIds && nextIds.length > 1) toPreload.push(nextIds[1]);
         if (prevIds && prevIds.length > 0) toPreload.push(prevIds[0]);
-
         toPreload.forEach(id => {
-            if (id) {
-                const img = new Image();
-                img.src = `/api/thumbnail/${id}`;
-            }
+            if (id) { const img = new Image(); img.src = `/api/thumbnail/${id}`; }
         });
     }
 
@@ -423,30 +489,31 @@
         if (!state.viewerPhotoId) return;
         const photoId = state.viewerPhotoId;
 
-        // Optimistic UI update
         state.likedSet.add(photoId);
         $viewerLiked.textContent = '♥ Liked';
         $viewerLiked.className = 'viewer-liked-indicator is-liked';
 
-        // Fire and forget
+        // Sync grid card state
+        const card = $grid.querySelector(`.thumb-card[data-photo-id="${photoId}"]`);
+        if (card) card.classList.add('is-liked');
+
         api(`/api/like/${photoId}`, { method: 'POST' }).catch(e =>
             console.error('like failed', e)
         );
-
-        // Auto-advance to next
-        viewerNext();
+        // NO auto-advance
     }
 
     async function viewerUnlike() {
         if (!state.viewerPhotoId) return;
         const photoId = state.viewerPhotoId;
 
-        // Optimistic UI update
         state.likedSet.delete(photoId);
         $viewerLiked.textContent = '♡ Unliked';
         $viewerLiked.className = 'viewer-liked-indicator is-unliked';
 
-        // Fire and forget
+        const card = $grid.querySelector(`.thumb-card[data-photo-id="${photoId}"]`);
+        if (card) card.classList.remove('is-liked');
+
         api(`/api/unlike/${photoId}`, { method: 'POST' }).catch(e =>
             console.error('unlike failed', e)
         );
@@ -455,41 +522,71 @@
     // ── Keyboard handling ────────────────────────────────────
 
     document.addEventListener('keydown', (e) => {
-        if (!state.viewerActive) return;
+        // Don't capture keys when focused on inputs
+        if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
 
-        switch (e.code) {
-            case 'ArrowLeft':
-                e.preventDefault();
-                viewerPrev();
-                break;
-            case 'ArrowRight':
-                e.preventDefault();
-                viewerNext();
-                break;
-            case 'Digit1':
-            case 'Numpad1':
-                e.preventDefault();
-                viewerLike();
-                break;
-            case 'Digit0':
-            case 'Numpad0':
-                e.preventDefault();
-                viewerUnlike();
-                break;
-            case 'Digit2':
-            case 'Numpad2':
-            case 'KeyO':
-                e.preventDefault();
-                loadOriginalForViewer();
-                break;
-            case 'Escape':
-                e.preventDefault();
-                closeViewer();
-                break;
+        if (state.viewerActive) {
+            // ── Viewer mode ──
+            switch (e.code) {
+                case 'ArrowLeft':
+                    e.preventDefault();
+                    viewerPrev();
+                    break;
+                case 'ArrowRight':
+                    e.preventDefault();
+                    viewerNext();
+                    break;
+                case 'Digit1':
+                case 'Numpad1':
+                    e.preventDefault();
+                    viewerLike();
+                    break;
+                case 'Digit0':
+                case 'Numpad0':
+                    e.preventDefault();
+                    viewerUnlike();
+                    break;
+                case 'Digit2':
+                case 'Numpad2':
+                case 'KeyO':
+                    e.preventDefault();
+                    loadOriginalForViewer();
+                    break;
+                case 'Escape':
+                case 'Space':
+                    e.preventDefault();
+                    closeViewer();
+                    break;
+            }
+        } else {
+            // ── Grid mode ──
+            switch (e.code) {
+                case 'ArrowLeft':
+                case 'ArrowRight':
+                case 'ArrowUp':
+                case 'ArrowDown':
+                    e.preventDefault();
+                    navigateGrid(e.code);
+                    break;
+                case 'Space':
+                    e.preventDefault();
+                    if (state.focusedPhotoId) openViewer(state.focusedPhotoId);
+                    break;
+                case 'Digit1':
+                case 'Numpad1':
+                    e.preventDefault();
+                    if (state.focusedPhotoId) gridLike(state.focusedPhotoId);
+                    break;
+                case 'Digit0':
+                case 'Numpad0':
+                    e.preventDefault();
+                    if (state.focusedPhotoId) gridUnlike(state.focusedPhotoId);
+                    break;
+            }
         }
     });
 
-    // ── Click handlers ───────────────────────────────────────
+    // ── Selection helpers ────────────────────────────────────
 
     function handleSelectionClick(card, photoId, isShift, isCmd) {
         const cards = Array.from($grid.querySelectorAll('.thumb-card'));
@@ -501,9 +598,7 @@
                 const lastIndex = cards.indexOf(lastCard);
                 const start = Math.min(lastIndex, clickedIndex);
                 const end = Math.max(lastIndex, clickedIndex);
-
                 const shouldSelect = state.selectedSet.has(state.lastClickedId);
-
                 for (let i = start; i <= end; i++) {
                     const c = cards[i];
                     const id = c.dataset.photoId;
@@ -542,7 +637,9 @@
         }
     }
 
-    // Event delegation on grid
+    // ── Click handlers ───────────────────────────────────────
+
+    // Grid: single click = focus, shift/cmd click = select
     $grid.addEventListener('click', (e) => {
         const card = e.target.closest('.thumb-card');
         if (!card) return;
@@ -554,7 +651,7 @@
             e.stopPropagation();
             handleSelectionClick(card, photoId, e.shiftKey, e.ctrlKey || e.metaKey);
         } else {
-            openViewer(photoId);
+            setFocusedCard(photoId);
         }
     });
 
@@ -575,12 +672,12 @@
         });
     }
 
-    // Double click to zoom
+    // Double click to zoom in viewer
     $viewerImgContainer.addEventListener('dblclick', () => {
         $viewerImgContainer.classList.toggle('is-zoomed');
     });
 
-    // Close viewer on clicking background (not the image)
+    // Close viewer on clicking background
     $viewerImgContainer.addEventListener('click', (e) => {
         if (e.target === e.currentTarget) closeViewer();
     });
@@ -596,6 +693,9 @@
         applyThumbSize();
     });
 
+    // Infinite scroll
+    window.addEventListener('scroll', loadMoreIfNeeded, { passive: true });
+
     // Rescan
     $btnRescan.addEventListener('click', async () => {
         $btnRescan.disabled = true;
@@ -605,7 +705,6 @@
             const count = data.total ?? data.count ?? '?';
             showToast(`Rescan complete: ${count} photos`);
             await fetchCounts();
-            state.currentPage = 1;
             await fetchPhotos();
         } catch (e) {
             showToast('Rescan failed');
@@ -624,12 +723,12 @@
         document.body.removeChild(a);
     }
 
-    // Download selected or liked
+    // Download: selected first, then liked fallback
     $btnDownload.addEventListener('click', async () => {
         if (state.selectedSet.size > 0) {
             $btnDownload.disabled = true;
             const selectedList = Array.from(state.selectedSet);
-            showToast(`Downloading ${selectedList.length} selected photos...`);
+            showToast(`Downloading ${selectedList.length} selected photos…`);
             try {
                 for (let i = 0; i < selectedList.length; i++) {
                     triggerDownload(selectedList[i]);
@@ -658,8 +757,7 @@
                 $btnDownload.disabled = false;
                 return;
             }
-
-            showToast(`Downloading ${likedList.length} photos...`);
+            showToast(`Downloading ${likedList.length} photos…`);
             for (let i = 0; i < likedList.length; i++) {
                 triggerDownload(likedList[i].photo_id);
                 await new Promise(resolve => setTimeout(resolve, 150));
