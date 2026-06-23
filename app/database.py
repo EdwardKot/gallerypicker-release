@@ -28,8 +28,9 @@ async def init_db(db: aiosqlite.Connection):
     cursor = await db.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='photo_meta'")
     has_photo_meta = await cursor.fetchone() is not None
 
-    # Define the new unified photos table schema
-    await db.executescript("""
+    # 1. Create the photos table with new columns if starting from scratch.
+    # If the table already exists, this statement does nothing.
+    await db.execute("""
         CREATE TABLE IF NOT EXISTS photos (
             photo_id TEXT PRIMARY KEY,
             relative_path TEXT NOT NULL,
@@ -43,22 +44,19 @@ async def init_db(db: aiosqlite.Connection):
             created_at TEXT,
             indexed_at TEXT NOT NULL
         );
-        CREATE INDEX IF NOT EXISTS idx_photos_mtime ON photos(mtime DESC);
-        CREATE INDEX IF NOT EXISTS idx_photos_relative_path ON photos(relative_path);
-        CREATE INDEX IF NOT EXISTS idx_photos_liked ON photos(liked);
     """)
 
-    # If old table exists, perform migration
+    # 2. Check if the columns exist in the existing photos table (required for upgrading old databases)
+    cursor = await db.execute("PRAGMA table_info(photos)")
+    columns = [row["name"] for row in await cursor.fetchall()]
+    
+    if "liked" not in columns:
+        await db.execute("ALTER TABLE photos ADD COLUMN liked INTEGER NOT NULL DEFAULT 0")
+    if "updated_at" not in columns:
+        await db.execute("ALTER TABLE photos ADD COLUMN updated_at TEXT")
+
+    # 3. Perform data migration if upgrading from the old two-table schema
     if has_photo_meta:
-        # Check if photos table has liked column (if it was created in the old version without it)
-        cursor = await db.execute("PRAGMA table_info(photos)")
-        columns = [row["name"] for row in await cursor.fetchall()]
-        
-        if "liked" not in columns:
-            await db.execute("ALTER TABLE photos ADD COLUMN liked INTEGER NOT NULL DEFAULT 0")
-        if "updated_at" not in columns:
-            await db.execute("ALTER TABLE photos ADD COLUMN updated_at TEXT")
-            
         # Copy liked state from photo_meta to photos
         await db.execute("""
             UPDATE photos 
@@ -66,8 +64,14 @@ async def init_db(db: aiosqlite.Connection):
                 updated_at = (SELECT updated_at FROM photo_meta WHERE photo_meta.photo_id = photos.photo_id)
             WHERE EXISTS (SELECT 1 FROM photo_meta WHERE photo_meta.photo_id = photos.photo_id)
         """)
-        
         # Drop the now redundant table
         await db.execute("DROP TABLE photo_meta")
+        
+    # 4. Now that columns are guaranteed to exist, create indexes safely
+    await db.executescript("""
+        CREATE INDEX IF NOT EXISTS idx_photos_mtime ON photos(mtime DESC);
+        CREATE INDEX IF NOT EXISTS idx_photos_relative_path ON photos(relative_path);
+        CREATE INDEX IF NOT EXISTS idx_photos_liked ON photos(liked);
+    """)
         
     await db.commit()

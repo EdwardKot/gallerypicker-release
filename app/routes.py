@@ -35,8 +35,8 @@ def _build_filter_sort_sql(filter_str: str, sort_str: str):
 
 @router.get("/api/photos")
 async def list_photos(
-    filter: str = Query("all", regex="^(all|liked|unliked)$"),
-    sort: str = Query("newest", regex="^(newest|oldest|name_asc|name_desc)$"),
+    filter: str = Query("all", pattern="^(all|liked|unliked)$"),
+    sort: str = Query("newest", pattern="^(newest|oldest|name_asc|name_desc)$"),
     page: int = Query(1, ge=1),
     page_size: int = Query(DEFAULT_PAGE_SIZE, ge=1, le=MAX_PAGE_SIZE)
 ):
@@ -84,8 +84,8 @@ async def list_photos(
 @router.get("/api/photo/{photo_id}")
 async def get_photo(
     photo_id: str,
-    filter: str = Query(None, regex="^(all|liked|unliked)$"),
-    sort: str = Query(None, regex="^(newest|oldest|name_asc|name_desc)$")
+    filter: str = Query(None, pattern="^(all|liked|unliked)$"),
+    sort: str = Query(None, pattern="^(newest|oldest|name_asc|name_desc)$")
 ):
     db = await get_db()
     cursor = await db.execute(
@@ -325,8 +325,8 @@ async def download_photo(photo_id: str):
 @router.get("/api/photo/{photo_id}/next")
 async def get_next_photo_id(
     photo_id: str,
-    filter: str = Query("all", regex="^(all|liked|unliked)$"),
-    sort: str = Query("newest", regex="^(newest|oldest|name_asc|name_desc)$")
+    filter: str = Query("all", pattern="^(all|liked|unliked)$"),
+    sort: str = Query("newest", pattern="^(newest|oldest|name_asc|name_desc)$")
 ):
     db = await get_db()
     where_clause, order_clause = _build_filter_sort_sql(filter, sort)
@@ -355,8 +355,8 @@ async def get_next_photo_id(
 @router.get("/api/photo/{photo_id}/prev")
 async def get_prev_photo_id(
     photo_id: str,
-    filter: str = Query("all", regex="^(all|liked|unliked)$"),
-    sort: str = Query("newest", regex="^(newest|oldest|name_asc|name_desc)$")
+    filter: str = Query("all", pattern="^(all|liked|unliked)$"),
+    sort: str = Query("newest", pattern="^(newest|oldest|name_asc|name_desc)$")
 ):
     db = await get_db()
     where_clause, order_clause = _build_filter_sort_sql(filter, sort)
