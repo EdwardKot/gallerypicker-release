@@ -1,4 +1,4 @@
-# Termux Gallery Picker
+# Gallery Picker
 
 A lightweight, browser-based photo culling tool that runs inside Android Termux.
 
@@ -11,7 +11,9 @@ Designed for professional smartphone sample photographers who want to review lar
 - 📸 Browse thousands of photos via responsive thumbnail grid
 - ⌨️ Rapid keyboard-driven photo culling workflow
 - ❤️ Like/unlike photos with instant persistence
-- 📦 Download liked originals as ZIP (preserves original format)
+- ✅ Click to select photos, Shift+Click for range selection
+- 📅 Date-grouped thumbnails with per-date select-all checkbox
+- 📦 Download selected or liked originals
 - 🔄 Smart thumbnail caching (1024px long edge)
 - 📱 Runs entirely inside Termux — no root, no Android Studio
 - 🖥️ Optimized for Mac desktop browser usage
@@ -20,52 +22,181 @@ Designed for professional smartphone sample photographers who want to review lar
 
 1. Start the server on your Android phone (in Termux)
 2. Open `http://PHONE_IP:8787` from your Mac browser
-3. Browse the thumbnail grid
-4. Click a photo to enter Viewer Mode
+3. Browse the thumbnail grid — scroll infinitely through all photos
+4. **Click** to focus a photo, **Double-click** to open viewer
 5. Use keyboard shortcuts:
-   - `←` / `→` — Navigate photos
-   - `1` — Like photo (auto-advances to next)
-   - `0` — Unlike photo (stays on current)
-   - `Esc` — Return to gallery
-6. Filter by Liked photos
-7. Download liked originals as ZIP
+   - `←` `→` `↑` `↓` — Navigate grid
+   - `Space` — Open/close viewer
+   - `1` — Like photo
+   - `0` — Unlike photo
+   - `D` — Download current photo (viewer)
+   - `2` / `O` — Load original resolution (viewer)
+   - `Esc` / `Space` — Close viewer
+6. Filter by All / Liked / Unliked photos
+7. Select photos with click (or Shift+Click for range), then download selected
 
-## Install in Termux
+## Termux Quick Start
+
+### 1. Install Termux dependencies
 
 ```bash
-# Update Termux packages
-pkg update && pkg upgrade -y
-
-# Install required packages
-pkg install python python-pillow git zip -y
-
-# Grant storage access
+pkg update -y
+pkg install python git rust binutils unzip zip -y
 termux-setup-storage
 ```
 
-## Setup Project
+When Android asks for storage permission, allow it.
+
+> ⚠️ **Do not** run `pip install --upgrade pip`. Termux manages its own Python/pip packages, and upgrading pip manually may break the Termux Python environment.
+
+### 2. Clone the project
 
 ```bash
-# Clone or create project directory
-mkdir -p ~/termux-gallery-picker
-cd ~/termux-gallery-picker
+cd ~
+git clone https://github.com/EdwardKot/gallerypicker-release.git gallerypicker
+cd ~/gallerypicker
+```
 
-# Copy project files here (or git clone)
+> Do not use a manually unzipped ZIP folder if you want to update with `git pull`.
 
-# Create virtual environment
-python -m venv .venv
-source .venv/bin/activate
+### 3. Install Python dependencies
 
-# Install Python dependencies
+```bash
 pip install -r requirements.txt
 ```
 
-## Run
+If this fails on `pydantic-core`, install Rust support first:
 
 ```bash
-cd ~/termux-gallery-picker
-source .venv/bin/activate
-uvicorn app.main:app --host 0.0.0.0 --port 8787
+pkg install rust binutils -y
+pip install -r requirements.txt
+```
+
+### 4. Run the server
+
+```bash
+cd ~/gallerypicker
+mkdir -p data cache
+export PHOTO_ROOT=/storage/emulated/0/DCIM/Camera
+export DATABASE_PATH=$PWD/data/gallery.db
+export CACHE_DIR=$PWD/cache
+python -m uvicorn app.main:app --host 0.0.0.0 --port 8787
+```
+
+When it works, you should see:
+
+```
+Application startup complete.
+Uvicorn running on http://0.0.0.0:8787
+```
+
+### 5. Open in browser
+
+On the phone:
+
+```
+http://127.0.0.1:8787
+```
+
+From a Mac or another device on the same Wi-Fi, first check the phone IP:
+
+```bash
+ip addr show wlan0
+```
+
+Then open:
+
+```
+http://PHONE_IP:8787
+```
+
+Example:
+
+```
+http://192.168.1.157:8787
+```
+
+### 6. Stop the server
+
+Press:
+
+```
+Ctrl + C
+```
+
+### 7. Restart later
+
+```bash
+cd ~/gallerypicker
+export PHOTO_ROOT=/storage/emulated/0/DCIM/Camera
+export DATABASE_PATH=$PWD/data/gallery.db
+export CACHE_DIR=$PWD/cache
+python -m uvicorn app.main:app --host 0.0.0.0 --port 8787
+```
+
+### 8. Update later
+
+```bash
+cd ~/gallerypicker
+git pull
+pip install -r requirements.txt
+```
+
+Then start again with the run command above.
+
+## Recommended: create run.sh
+
+Create `run.sh` in the project root:
+
+```bash
+#!/data/data/com.termux/files/usr/bin/bash
+cd "$(dirname "$0")"
+mkdir -p data cache
+export PHOTO_ROOT=/storage/emulated/0/DCIM/Camera
+export DATABASE_PATH="$PWD/data/gallery.db"
+export CACHE_DIR="$PWD/cache"
+python -m uvicorn app.main:app --host 0.0.0.0 --port 8787
+```
+
+Make it executable:
+
+```bash
+chmod +x run.sh
+```
+
+Then start the app with:
+
+```bash
+cd ~/gallerypicker
+./run.sh
+```
+
+## Recommended: create update.sh
+
+Create `update.sh`:
+
+```bash
+#!/data/data/com.termux/files/usr/bin/bash
+set -e
+cd "$(dirname "$0")"
+git pull
+pip install -r requirements.txt
+mkdir -p data cache
+echo "Update complete."
+echo "Run with: ./run.sh"
+```
+
+Make it executable:
+
+```bash
+chmod +x update.sh
+```
+
+Then update with:
+
+```bash
+cd ~/gallerypicker
+./update.sh
 ```
 
 ## Find Your Phone's IP
@@ -82,25 +213,13 @@ Then open from your Mac browser:
 http://192.168.1.42:8787
 ```
 
-## Stop
-
-Press `Ctrl+C` in Termux.
-
-## Restart Later
-
-```bash
-cd ~/termux-gallery-picker
-source .venv/bin/activate
-uvicorn app.main:app --host 0.0.0.0 --port 8787
-```
-
 ## Configuration
 
 Set environment variables before running:
 
 | Variable | Default | Description |
 |---|---|---|
-| `PHOTO_ROOT` | `~/storage/shared/DCIM/Camera` | Photo source directory |
+| `PHOTO_ROOT` | `/storage/emulated/0/DCIM/Camera` | Photo source directory |
 | `HOST` | `0.0.0.0` | Server bind address |
 | `PORT` | `8787` | Server port |
 | `THUMBNAIL_SIZE` | `1024` | Thumbnail long edge in pixels |
@@ -110,7 +229,7 @@ Set environment variables before running:
 Example with custom photo root:
 
 ```bash
-PHOTO_ROOT=~/storage/shared/Pictures uvicorn app.main:app --host 0.0.0.0 --port 8787
+PHOTO_ROOT=/storage/emulated/0/Pictures python -m uvicorn app.main:app --host 0.0.0.0 --port 8787
 ```
 
 ## API Endpoints
@@ -129,12 +248,11 @@ PHOTO_ROOT=~/storage/shared/Pictures uvicorn app.main:app --host 0.0.0.0 --port 
 | `GET` | `/api/cache/stats` | Thumbnail cache statistics |
 | `POST` | `/api/cache/clear` | Clear thumbnail cache |
 | `GET` | `/api/download/{id}` | Download original photo |
-| `GET` | `/api/download-liked` | Download all liked as ZIP |
 
 ## Project Structure
 
 ```
-termux-gallery-picker/
+gallerypicker/
   app/
     __init__.py
     main.py          # FastAPI app entry point
@@ -153,6 +271,8 @@ termux-gallery-picker/
     gallery.db       # SQLite database (auto-created)
   cache/
     thumbnails/      # Thumbnail cache (auto-created)
+  run.sh             # One-click start script
+  update.sh          # One-click update script
   requirements.txt
   README.md
 ```
@@ -171,7 +291,7 @@ termux-gallery-picker/
 ### "Photo root not found"
 Run `termux-setup-storage` and verify the path exists:
 ```bash
-ls ~/storage/shared/DCIM/Camera
+ls /storage/emulated/0/DCIM/Camera
 ```
 
 ### Slow first load
