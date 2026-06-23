@@ -356,6 +356,7 @@ header {
     justify-content: center;
     overflow: hidden;
     min-height: 0;
+    padding: 50px 0;
 }
 
 .viewer-image-container img {
