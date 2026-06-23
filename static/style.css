@@ -390,7 +390,7 @@ header {
 .viewer-bottom-bar {
     display: flex;
     align-items: center;
-    justify-content: center;
+    justify-content: space-between;
     gap: 12px;
     padding: 10px 16px;
     background: rgba(0, 0, 0, 0.95);
@@ -412,7 +412,7 @@ header {
 }
 
 .viewer-filename-bottom {
-    font-size: 12px;
+    font-size: 13px;
     color: var(--text-secondary);
     overflow: hidden;
     text-overflow: ellipsis;
@@ -421,8 +421,8 @@ header {
 }
 
 .viewer-nav-btn {
-    width: 44px;
-    height: 44px;
+    width: 40px;
+    height: 40px;
     border: 1px solid var(--border);
     border-radius: 50%;
     background: rgba(255, 255, 255, 0.05);
