@@ -318,7 +318,7 @@ async def download_photo(photo_id: str):
         abs_path,
         media_type=media_type,
         filename=filename,
-        headers={"Content-Disposition": f'inline; filename="{filename}"'}
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'}
     )
 
 
