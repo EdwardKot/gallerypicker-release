@@ -451,12 +451,12 @@ header {
 
 .viewer-load-original-btn,
 .viewer-download-btn {
-    padding: 6px 14px;
+    padding: 8px 18px;
     border: 1px solid var(--border);
-    border-radius: 4px;
+    border-radius: 6px;
     background: rgba(255, 255, 255, 0.05);
     color: var(--text-primary);
-    font-size: 13px;
+    font-size: 14px;
     cursor: pointer;
     transition: background 0.15s, color 0.15s, border-color 0.15s;
 }
