@@ -156,6 +156,17 @@ header {
     margin-top: 12px;
     letter-spacing: 1px;
     text-transform: uppercase;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.date-checkbox {
+    width: 15px;
+    height: 15px;
+    cursor: pointer;
+    accent-color: var(--accent);
+    margin: 0;
 }
 
 /* ── Thumbnail Card ──────────────────────────────────────── */
@@ -376,7 +387,8 @@ header {
     border-top: 1px solid #222;
 }
 
-.viewer-load-original-btn {
+.viewer-load-original-btn,
+.viewer-download-btn {
     padding: 4px 10px;
     border: 1px solid var(--border);
     border-radius: 4px;
@@ -387,12 +399,14 @@ header {
     transition: background 0.15s, color 0.15s, border-color 0.15s;
 }
 
-.viewer-load-original-btn:hover:not(:disabled) {
+.viewer-load-original-btn:hover:not(:disabled),
+.viewer-download-btn:hover:not(:disabled) {
     background: var(--bg-hover);
     border-color: var(--accent);
 }
 
-.viewer-load-original-btn:disabled {
+.viewer-load-original-btn:disabled,
+.viewer-download-btn:disabled {
     opacity: 0.5;
     cursor: default;
 }

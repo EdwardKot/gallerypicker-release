@@ -45,6 +45,7 @@
     const $btnDownload = document.getElementById('btn-download-liked');
     const $btnClearSelection = document.getElementById('btn-clear-selection');
     const $viewerLoadOriginal = document.getElementById('viewer-load-original');
+    const $viewerDownload = document.getElementById('viewer-download');
     const $countAll = document.getElementById('count-all');
     const $countLiked = document.getElementById('count-liked');
     const $countUnliked = document.getElementById('count-unliked');
@@ -161,6 +162,22 @@
         return `${year}-${month}-${day}`;
     }
 
+    function syncDateCheckboxes() {
+        const dateHeaders = $grid.querySelectorAll('.date-header');
+        dateHeaders.forEach(header => {
+            const checkbox = header.querySelector('.date-checkbox');
+            if (!checkbox) return;
+            const date = checkbox.dataset.date;
+            const cardsOfDate = Array.from($grid.querySelectorAll(`.thumb-card[data-date="${date}"]`));
+            if (cardsOfDate.length === 0) {
+                checkbox.checked = false;
+                return;
+            }
+            const allSelected = cardsOfDate.every(card => state.selectedSet.has(card.dataset.photoId));
+            checkbox.checked = allSelected;
+        });
+    }
+
     function renderGrid(photosToRender) {
         const frag = document.createDocumentFragment();
         photosToRender.forEach(photo => {
@@ -169,7 +186,17 @@
                 state.lastRenderedDate = dateStr;
                 const header = document.createElement('div');
                 header.className = 'date-header';
-                header.textContent = dateStr;
+                
+                const checkbox = document.createElement('input');
+                checkbox.type = 'checkbox';
+                checkbox.className = 'date-checkbox';
+                checkbox.dataset.date = dateStr;
+                checkbox.title = `Select/deselect all photos on ${dateStr}`;
+                header.appendChild(checkbox);
+                
+                const dateText = document.createTextNode(dateStr);
+                header.appendChild(dateText);
+                
                 frag.appendChild(header);
             }
 
@@ -181,6 +208,7 @@
                 (isSelected ? ' is-selected' : '') +
                 (isFocused ? ' is-focused' : '');
             card.dataset.photoId = photo.photo_id;
+            card.dataset.date = dateStr;
 
             const placeholder = document.createElement('div');
             placeholder.className = 'thumb-placeholder';
@@ -211,6 +239,7 @@
             frag.appendChild(card);
         });
         $grid.appendChild(frag);
+        syncDateCheckboxes();
     }
 
     // ── Lazy loading with IntersectionObserver ───────────────
@@ -573,6 +602,12 @@
                     e.preventDefault();
                     loadOriginalForViewer();
                     break;
+                case 'KeyD':
+                    e.preventDefault();
+                    if (state.viewerPhotoId) {
+                        triggerDownload(state.viewerPhotoId);
+                    }
+                    break;
                 case 'Escape':
                 case 'Space':
                     e.preventDefault();
@@ -639,6 +674,7 @@
         }
 
         state.lastClickedId = photoId;
+        syncDateCheckboxes();
         updateDownloadButton();
     }
 
@@ -658,6 +694,27 @@
 
     // Grid: single click = focus, shift/cmd click = select
     $grid.addEventListener('click', (e) => {
+        const dateCheckbox = e.target.closest('.date-checkbox');
+        if (dateCheckbox) {
+            e.stopPropagation();
+            const checked = dateCheckbox.checked;
+            const date = dateCheckbox.dataset.date;
+            const cardsOfDate = $grid.querySelectorAll(`.thumb-card[data-date="${date}"]`);
+            cardsOfDate.forEach(card => {
+                const photoId = card.dataset.photoId;
+                if (checked) {
+                    state.selectedSet.add(photoId);
+                    card.classList.add('is-selected');
+                } else {
+                    state.selectedSet.delete(photoId);
+                    card.classList.remove('is-selected');
+                }
+            });
+            updateDownloadButton();
+            syncDateCheckboxes();
+            return;
+        }
+
         const card = e.target.closest('.thumb-card');
         if (!card) return;
         const photoId = card.dataset.photoId;
@@ -679,6 +736,14 @@
         $viewerLoadOriginal.addEventListener('click', loadOriginalForViewer);
     }
 
+    if ($viewerDownload) {
+        $viewerDownload.addEventListener('click', () => {
+            if (state.viewerPhotoId) {
+                triggerDownload(state.viewerPhotoId);
+            }
+        });
+    }
+
     if ($btnClearSelection) {
         $btnClearSelection.addEventListener('click', () => {
             state.selectedSet.clear();
@@ -687,14 +752,10 @@
             $grid.querySelectorAll('.thumb-card.is-selected').forEach(c => {
                 c.classList.remove('is-selected');
             });
+            syncDateCheckboxes();
             updateDownloadButton();
         });
     }
-
-    // Double click to zoom in viewer
-    $viewerImgContainer.addEventListener('dblclick', () => {
-        $viewerImgContainer.classList.toggle('is-zoomed');
-    });
 
     // Close viewer on clicking background
     $viewerImgContainer.addEventListener('click', (e) => {
