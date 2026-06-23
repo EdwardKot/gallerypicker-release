@@ -744,6 +744,12 @@
 
     // Grid: single click = focus, double click = open viewer, shift/cmd click = select
     $grid.addEventListener('click', (e) => {
+        const header = e.target.closest('.date-header');
+        if (header) {
+            // Clicking the date header text / gap: nothing else to do here
+            return;
+        }
+
         const dateCheckbox = e.target.closest('.date-checkbox');
         if (dateCheckbox) {
             e.stopPropagation();

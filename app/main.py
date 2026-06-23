@@ -14,7 +14,7 @@ from app.routes import router
 async def lifespan(app: FastAPI):
     # Startup
     print(f"\n{'='*60}")
-    print(f"  Termux Gallery Picker")
+    print(f"  Gallery Picker")
     print(f"  Photo root: {os.path.expanduser(PHOTO_ROOT)}")
     print(f"  Server: http://{HOST}:{PORT}")
     print(f"{'='*60}\n")
@@ -37,7 +37,7 @@ async def lifespan(app: FastAPI):
     await close_db()
 
 
-app = FastAPI(title="Termux Gallery Picker", lifespan=lifespan)
+app = FastAPI(title="Gallery Picker", lifespan=lifespan)
 
 # Static files
 static_dir = os.path.join(BASE_DIR, "static")
