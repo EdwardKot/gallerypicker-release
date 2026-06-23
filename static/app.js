@@ -320,18 +320,6 @@
         }
     }
 
-    function getGridColumns() {
-        const cards = $grid.querySelectorAll('.thumb-card');
-        if (cards.length < 2) return 1;
-        const firstTop = cards[0].offsetTop;
-        let cols = 1;
-        for (let i = 1; i < Math.min(cards.length, 30); i++) {
-            if (cards[i].offsetTop === firstTop) cols++;
-            else break;
-        }
-        return cols;
-    }
-
     function navigateGrid(direction) {
         const cards = Array.from($grid.querySelectorAll('.thumb-card'));
         if (cards.length === 0) return;
@@ -353,11 +341,35 @@
         } else if (direction === 'ArrowLeft') {
             newIndex = Math.max(currentIndex - 1, 0);
         } else if (direction === 'ArrowDown' || direction === 'ArrowUp') {
-            const cols = getGridColumns();
-            if (direction === 'ArrowDown') {
-                newIndex = Math.min(currentIndex + cols, cards.length - 1);
-            } else {
-                newIndex = Math.max(currentIndex - cols, 0);
+            const currentCard = cards[currentIndex];
+            const currentLeft = currentCard.offsetLeft;
+            const currentTop = currentCard.offsetTop;
+
+            // Group cards by offsetTop to find rows
+            const rowTops = [];
+            cards.forEach(c => {
+                if (rowTops.length === 0 || rowTops[rowTops.length - 1] !== c.offsetTop) {
+                    rowTops.push(c.offsetTop);
+                }
+            });
+
+            const currentRow = rowTops.indexOf(currentTop);
+            const targetRow = direction === 'ArrowDown' ? currentRow + 1 : currentRow - 1;
+
+            if (targetRow >= 0 && targetRow < rowTops.length) {
+                const targetTop = rowTops[targetRow];
+                // Find card in target row with closest offsetLeft
+                const rowCards = cards.filter(c => c.offsetTop === targetTop);
+                let bestCard = rowCards[0];
+                let bestDist = Math.abs(rowCards[0].offsetLeft - currentLeft);
+                for (let i = 1; i < rowCards.length; i++) {
+                    const dist = Math.abs(rowCards[i].offsetLeft - currentLeft);
+                    if (dist < bestDist) {
+                        bestDist = dist;
+                        bestCard = rowCards[i];
+                    }
+                }
+                newIndex = cards.indexOf(bestCard);
             }
         }
 
