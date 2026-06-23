@@ -842,10 +842,17 @@
         if (state.selectedSet.size > 0) {
             const selectedList = Array.from(state.selectedSet);
             showToast(`Downloading ${selectedList.length} selected photos…`);
-            // Open all downloads synchronously so each inherits the user gesture
-            // — browsers won't block them as popups.
             for (let i = 0; i < selectedList.length; i++) {
-                window.open(`/api/download/${selectedList[i]}`, '_blank');
+                const a = document.createElement('a');
+                a.href = `/api/download/${selectedList[i]}`;
+                a.download = '';
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                // Brief yield so each download has time to start from its own click context
+                if (i < selectedList.length - 1) {
+                    await new Promise(r => setTimeout(r, 200));
+                }
             }
             return;
         }
@@ -866,7 +873,15 @@
             }
             showToast(`Downloading ${likedList.length} photos…`);
             for (let i = 0; i < likedList.length; i++) {
-                window.open(`/api/download/${likedList[i].photo_id}`, '_blank');
+                const a = document.createElement('a');
+                a.href = `/api/download/${likedList[i].photo_id}`;
+                a.download = '';
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                if (i < likedList.length - 1) {
+                    await new Promise(r => setTimeout(r, 200));
+                }
             }
         } catch (e) {
             console.error('Download liked failed', e);
