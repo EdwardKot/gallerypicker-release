@@ -2,7 +2,7 @@ import os
 import asyncio
 import mimetypes
 from datetime import datetime, timezone
-from fastapi import APIRouter, Query, HTTPException, Request
+from fastapi import APIRouter, Query, HTTPException
 from fastapi.responses import FileResponse, JSONResponse
 from app.database import get_db
 from app.scanner import scan_photos
