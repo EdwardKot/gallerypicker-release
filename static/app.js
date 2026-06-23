@@ -521,8 +521,8 @@
                 } else {
                     state.likedSet.delete(photoId);
                 }
-                $viewerLiked.textContent = liked ? '♥ Liked' : '♡ Unliked';
-                $viewerLiked.className = 'viewer-liked-indicator ' + (liked ? 'is-liked' : 'is-unliked');
+                $viewerLiked.textContent = liked ? '♥ Liked' : '';
+                $viewerLiked.className = 'viewer-liked-indicator ' + (liked ? 'is-liked' : '');
 
                 state.viewerNextIds = photo.next_ids || [];
                 state.viewerPrevIds = photo.prev_ids || [];
@@ -588,8 +588,8 @@
         const photoId = state.viewerPhotoId;
 
         state.likedSet.delete(photoId);
-        $viewerLiked.textContent = '♡ Unliked';
-        $viewerLiked.className = 'viewer-liked-indicator is-unliked';
+        $viewerLiked.textContent = '';
+        $viewerLiked.className = 'viewer-liked-indicator';
 
         const card = $grid.querySelector(`.thumb-card[data-photo-id="${photoId}"]`);
         if (card) card.classList.remove('is-liked');
@@ -834,12 +834,7 @@
     });
 
     function triggerDownload(photoId) {
-        const a = document.createElement('a');
-        a.href = `/api/download/${photoId}`;
-        a.style.display = 'none';
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
+        window.open(`/api/download/${photoId}`, '_blank');
     }
 
     // Download: selected first, then liked fallback
