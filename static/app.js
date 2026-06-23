@@ -16,7 +16,6 @@
         viewerIndex: -1,
         viewerNextIds: [],
         viewerPrevIds: [],
-        viewerNextIds: [],
         previewSize: parseInt(localStorage.getItem('viewerPreviewSize') || '1024', 10),
         scrollPosition: 0,
         thumbSize: 200,

@@ -441,7 +441,7 @@ header {
 }
 
 .viewer-filename-bottom {
-    font-size: 12px;
+    font-size: 13px;
     color: var(--text-secondary);
     overflow: hidden;
     text-overflow: ellipsis;
