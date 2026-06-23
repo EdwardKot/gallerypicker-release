@@ -441,15 +441,6 @@ header {
     border-color: var(--accent);
 }
 
-.viewer-filename-bottom {
-    font-size: 13px;
-    color: var(--text-secondary);
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    max-width: 40vw;
-}
-
 .viewer-load-original-btn,
 .viewer-download-btn {
     padding: 8px 18px;
