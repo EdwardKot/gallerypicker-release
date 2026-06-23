@@ -892,9 +892,12 @@
             const ids = Array.from(state.selectedSet);
             showToast(`Downloading ${ids.length} selected photos…`);
             ids.forEach(downloadWithIframe);
+            $btnDownload.disabled = false;
         } else {
             showToast('Requesting liked list…');
+            $btnDownload.disabled = true;
             apiJson('/api/photos?filter=liked&page_size=10000').then(data => {
+                $btnDownload.disabled = false;
                 const ids = (data.photos || []).map(p => p.photo_id);
                 if (ids.length === 0) {
                     showToast('No liked photos found');
@@ -903,6 +906,7 @@
                 showToast(`Downloading ${ids.length} liked photos…`);
                 ids.forEach(downloadWithIframe);
             }).catch(e => {
+                $btnDownload.disabled = false;
                 console.error('downloadLiked', e);
                 showToast('Download failed');
             });
