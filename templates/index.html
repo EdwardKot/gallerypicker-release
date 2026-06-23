@@ -18,6 +18,7 @@
             </div>
         </div>
         <div class="header-right">
+            <button id="btn-settings" class="tool-btn" title="Settings">⚙ Settings</button>
             <button id="btn-rescan" class="tool-btn" title="Rescan photo library">⟳ Rescan</button>
             <button id="btn-clear-selection" class="tool-btn" style="display: none;" title="Clear current selection">✕ Clear</button>
             <button id="btn-download-liked" class="tool-btn" title="Download liked photos as ZIP">⬇ Download Liked</button>
@@ -52,6 +53,43 @@
     </div>
 
     <div id="toast" class="toast"></div>
+
+    <!-- Settings Modal -->
+    <div id="settings-overlay" class="settings-overlay" style="display:none">
+        <div class="settings-panel">
+            <div class="settings-header">
+                <h2>Settings</h2>
+                <button id="settings-close" class="settings-close-btn" title="Close">✕</button>
+            </div>
+            <div class="settings-body">
+                <!-- Cache section -->
+                <div class="settings-section">
+                    <h3>Thumbnail Cache</h3>
+                    <div class="settings-row">
+                        <span class="settings-label">Cached files:</span>
+                        <span id="settings-cache-count">—</span>
+                    </div>
+                    <div class="settings-row">
+                        <span class="settings-label">Cache size:</span>
+                        <span id="settings-cache-size">—</span>
+                    </div>
+                    <button id="settings-clear-cache" class="settings-btn settings-btn-danger">Clear Cache</button>
+                </div>
+
+                <!-- Preview size section -->
+                <div class="settings-section">
+                    <h3>Viewer Preview Size</h3>
+                    <p class="settings-desc">Long edge pixel size for the viewer image. Smaller = faster load, larger = more detail.</p>
+                    <select id="settings-preview-size" class="settings-select">
+                        <option value="512">512 px</option>
+                        <option value="1024" selected>1024 px (default)</option>
+                        <option value="2048">2048 px</option>
+                        <option value="0">Original size</option>
+                    </select>
+                </div>
+            </div>
+        </div>
+    </div>
 
     <script src="/static/app.js"></script>
 </body>

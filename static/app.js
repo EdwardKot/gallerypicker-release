@@ -16,6 +16,8 @@
         viewerIndex: -1,
         viewerNextIds: [],
         viewerPrevIds: [],
+        viewerNextIds: [],
+        previewSize: parseInt(localStorage.getItem('viewerPreviewSize') || '1024', 10),
         scrollPosition: 0,
         thumbSize: 200,
         likedSet: new Set(),
@@ -46,6 +48,13 @@
     const $btnClearSelection = document.getElementById('btn-clear-selection');
     const $viewerLoadOriginal = document.getElementById('viewer-load-original');
     const $viewerDownload = document.getElementById('viewer-download');
+    const $btnSettings = document.getElementById('btn-settings');
+    const $settingsOverlay = document.getElementById('settings-overlay');
+    const $settingsClose = document.getElementById('settings-close');
+    const $settingsCacheCount = document.getElementById('settings-cache-count');
+    const $settingsCacheSize = document.getElementById('settings-cache-size');
+    const $settingsClearCache = document.getElementById('settings-clear-cache');
+    const $settingsPreviewSize = document.getElementById('settings-preview-size');
     const $countAll = document.getElementById('count-all');
     const $countLiked = document.getElementById('count-liked');
 
@@ -445,9 +454,10 @@
             $viewerLoadOriginal.disabled = false;
         }
 
-        // Show loading state, then load 1024px thumbnail
+        // Show loading state, then load at configured preview size
         $viewerImg.style.opacity = '0.4';
-        const thumbUrl = `/api/thumbnail/${photoId}`;
+        const sizeParam = state.previewSize > 0 ? `?size=${state.previewSize}` : '';
+        const thumbUrl = `/api/thumbnail/${photoId}${sizeParam}`;
         $viewerImg.onload = () => { $viewerImg.style.opacity = '1'; };
         $viewerImg.src = thumbUrl;
 
@@ -883,6 +893,11 @@
 
     async function init() {
         applyThumbSize();
+        // Restore preview size setting
+        if ($settingsPreviewSize) {
+            const saved = String(state.previewSize);
+            $settingsPreviewSize.value = saved === '0' ? '0' : state.previewSize.toString();
+        }
         setLoading(true);
         try {
             await fetchCounts();
@@ -894,4 +909,54 @@
     }
 
     init();
+
+    // ── Settings panel ──────────────────────────────────────
+
+    function openSettings() {
+        $settingsOverlay.style.display = '';
+        refreshCacheStats();
+    }
+
+    function closeSettings() {
+        $settingsOverlay.style.display = 'none';
+    }
+
+    async function refreshCacheStats() {
+        try {
+            const stats = await apiJson('/api/cache/stats');
+            $settingsCacheCount.textContent = stats.file_count ?? '—';
+            $settingsCacheSize.textContent = stats.total_size_human ?? '—';
+        } catch (e) {
+            $settingsCacheCount.textContent = 'Error';
+            $settingsCacheSize.textContent = 'Error';
+        }
+    }
+
+    $btnSettings.addEventListener('click', openSettings);
+    $settingsClose.addEventListener('click', closeSettings);
+    $settingsOverlay.addEventListener('click', (e) => {
+        if (e.target === $settingsOverlay) closeSettings();
+    });
+
+    $settingsClearCache.addEventListener('click', async () => {
+        $settingsClearCache.disabled = true;
+        $settingsClearCache.textContent = 'Clearing…';
+        try {
+            const result = await apiJson('/api/cache/clear', { method: 'POST' });
+            showToast(`Cache cleared: ${result.freed || ''} freed`);
+            refreshCacheStats();
+        } catch (e) {
+            showToast('Failed to clear cache');
+        } finally {
+            $settingsClearCache.disabled = false;
+            $settingsClearCache.textContent = 'Clear Cache';
+        }
+    });
+
+    $settingsPreviewSize.addEventListener('change', () => {
+        const val = parseInt($settingsPreviewSize.value, 10);
+        state.previewSize = val;
+        localStorage.setItem('viewerPreviewSize', val.toString());
+        showToast('Preview size saved');
+    });
 })();
