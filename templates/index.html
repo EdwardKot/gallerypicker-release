@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gallery Picker</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <header id="header">
+        <div class="header-left">
+            <h1>Gallery Picker</h1>
+        </div>
+        <div class="header-center">
+            <div class="filters">
+                <button class="filter-btn active" data-filter="all">All <span id="count-all">0</span></button>
+                <button class="filter-btn" data-filter="liked">Liked <span id="count-liked">0</span></button>
+                <button class="filter-btn" data-filter="unliked">Unliked <span id="count-unliked">0</span></button>
+            </div>
+        </div>
+        <div class="header-right">
+            <button id="btn-rescan" class="tool-btn" title="Rescan photo library">⟳ Rescan</button>
+            <button id="btn-clear-selection" class="tool-btn" style="display: none;" title="Clear current selection">✕ Clear</button>
+            <button id="btn-download-liked" class="tool-btn" title="Download liked photos as ZIP">⬇ Download Liked</button>
+            <div class="thumb-size-control">
+                <label>Size</label>
+                <input type="range" id="thumb-size-slider" min="120" max="400" value="200" step="20">
+            </div>
+        </div>
+    </header>
+
+    <main id="gallery">
+        <div id="photo-grid" class="photo-grid"></div>
+        <div id="pagination" class="pagination"></div>
+        <div id="loading" class="loading">Loading...</div>
+        <div id="empty-state" class="empty-state" style="display:none">
+            <p>No photos found.</p>
+            <p>Check your photo root directory and try rescanning.</p>
+        </div>
+    </main>
+
+    <div id="viewer" class="viewer" style="display:none">
+        <div class="viewer-image-container">
+            <img id="viewer-img" src="" alt="Photo viewer">
+        </div>
+        <div class="viewer-info">
+            <span id="viewer-filename"></span>
+            <span id="viewer-position"></span>
+            <button id="viewer-load-original" class="viewer-load-original-btn" title="Load high-res original image (2 or O)">Load Original</button>
+            <span id="viewer-liked" class="viewer-liked-indicator"></span>
+        </div>
+        <div class="viewer-controls-hint">
+            ← → Navigate &nbsp;|&nbsp; 1 Like &nbsp;|&nbsp; 0 Unlike &nbsp;|&nbsp; 2 / O Load Original &nbsp;|&nbsp; Esc Close
+        </div>
+        <button id="viewer-close" class="viewer-close-btn" title="Close (Esc)">✕</button>
+    </div>
+
+    <div id="toast" class="toast"></div>
+
+    <script src="/static/app.js"></script>
+</body>
+</html>

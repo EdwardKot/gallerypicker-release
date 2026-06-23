@@ -1,0 +1,471 @@
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+:root {
+    --bg-primary: #1a1a1a;
+    --bg-secondary: #252525;
+    --bg-header: #0d0d0d;
+    --bg-hover: #333;
+    --text-primary: #e0e0e0;
+    --text-secondary: #888;
+    --accent: #4a9eff;
+    --accent-hover: #6ab4ff;
+    --liked-color: #ff4d6a;
+    --border: #333;
+    --thumb-size: 200px;
+}
+
+body {
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    overflow-x: hidden;
+}
+
+/* ── Header ──────────────────────────────────────────────── */
+
+header {
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 10px 16px;
+    background: var(--bg-header);
+    border-bottom: 1px solid var(--border);
+    flex-wrap: wrap;
+}
+
+.header-left h1 {
+    font-size: 16px;
+    font-weight: 600;
+    white-space: nowrap;
+    color: var(--text-primary);
+}
+
+.header-center {
+    display: flex;
+    align-items: center;
+}
+
+.header-right {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+/* ── Filter Buttons ──────────────────────────────────────── */
+
+.filters {
+    display: flex;
+    gap: 4px;
+}
+
+.filter-btn {
+    padding: 6px 14px;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    background: transparent;
+    color: var(--text-secondary);
+    font-size: 13px;
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+
+.filter-btn:hover {
+    background: var(--bg-hover);
+    color: var(--text-primary);
+}
+
+.filter-btn.active {
+    background: var(--accent);
+    color: #fff;
+    border-color: var(--accent);
+}
+
+.filter-btn span {
+    margin-left: 4px;
+    opacity: 0.7;
+    font-size: 12px;
+}
+
+/* ── Tool Buttons ────────────────────────────────────────── */
+
+.tool-btn {
+    padding: 6px 12px;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    background: transparent;
+    color: var(--text-secondary);
+    font-size: 13px;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: background 0.15s, color 0.15s;
+}
+
+.tool-btn:hover {
+    background: var(--bg-hover);
+    color: var(--text-primary);
+}
+
+.tool-btn:active {
+    background: var(--bg-secondary);
+}
+
+/* ── Thumb Size Slider ───────────────────────────────────── */
+
+.thumb-size-control {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.thumb-size-control label {
+    font-size: 12px;
+    color: var(--text-secondary);
+}
+
+.thumb-size-control input[type="range"] {
+    width: 80px;
+    accent-color: var(--accent);
+    cursor: pointer;
+}
+
+/* ── Gallery Grid ────────────────────────────────────────── */
+
+#gallery {
+    padding: 16px;
+    min-height: calc(100vh - 52px);
+}
+
+.photo-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(var(--thumb-size), 1fr));
+    gap: 8px;
+}
+
+/* ── Thumbnail Card ──────────────────────────────────────── */
+
+.thumb-card {
+    position: relative;
+    background: var(--bg-secondary);
+    border: 2px solid transparent;
+    border-radius: 4px;
+    overflow: hidden;
+    cursor: pointer;
+    transition: border-color 0.15s, transform 0.1s;
+    aspect-ratio: 1 / 1;
+}
+
+.thumb-card:hover {
+    border-color: var(--accent);
+    transform: scale(1.02);
+}
+
+.thumb-card img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+    background: var(--bg-secondary);
+}
+
+.thumb-card .thumb-placeholder {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-secondary);
+    font-size: 12px;
+}
+
+.thumb-card .thumb-liked {
+    position: absolute;
+    top: 6px;
+    right: 6px;
+    width: 20px;
+    height: 20px;
+    font-size: 16px;
+    line-height: 20px;
+    text-align: center;
+    color: var(--liked-color);
+    filter: drop-shadow(0 1px 2px rgba(0,0,0,0.6));
+    pointer-events: none;
+    display: none;
+}
+
+.thumb-card.is-liked .thumb-liked {
+    display: block;
+}
+
+.thumb-card.is-selected {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 2px var(--accent);
+}
+
+.thumb-card .thumb-selected-indicator {
+    position: absolute;
+    top: 6px;
+    left: 6px;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    background: var(--accent);
+    color: #fff;
+    font-size: 12px;
+    font-weight: bold;
+    line-height: 20px;
+    text-align: center;
+    display: none;
+    filter: drop-shadow(0 1px 2px rgba(0,0,0,0.6));
+    pointer-events: none;
+    z-index: 2;
+}
+
+.thumb-card.is-selected .thumb-selected-indicator {
+    display: block;
+}
+
+.thumb-card .thumb-filename {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    padding: 4px 6px;
+    background: linear-gradient(transparent, rgba(0,0,0,0.75));
+    font-size: 11px;
+    color: #ccc;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    pointer-events: none;
+}
+
+/* ── Pagination ──────────────────────────────────────────── */
+
+.pagination {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    padding: 20px 0;
+}
+
+.pagination button {
+    padding: 8px 16px;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    background: transparent;
+    color: var(--text-primary);
+    font-size: 13px;
+    cursor: pointer;
+    transition: background 0.15s;
+}
+
+.pagination button:hover:not(:disabled) {
+    background: var(--bg-hover);
+}
+
+.pagination button:disabled {
+    opacity: 0.3;
+    cursor: default;
+}
+
+.pagination .page-info {
+    font-size: 13px;
+    color: var(--text-secondary);
+}
+
+/* ── Loading / Empty ─────────────────────────────────────── */
+
+.loading {
+    text-align: center;
+    padding: 60px 20px;
+    color: var(--text-secondary);
+    font-size: 14px;
+    display: none;
+}
+
+.loading.visible {
+    display: block;
+}
+
+.empty-state {
+    text-align: center;
+    padding: 80px 20px;
+    color: var(--text-secondary);
+    font-size: 14px;
+}
+
+.empty-state p + p {
+    margin-top: 8px;
+    font-size: 13px;
+}
+
+/* ── Viewer Overlay ──────────────────────────────────────── */
+
+.viewer {
+    position: fixed;
+    inset: 0;
+    z-index: 1000;
+    background: #000;
+    display: flex;
+    flex-direction: column;
+}
+
+.viewer-image-container {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    min-height: 0;
+}
+
+.viewer-image-container img {
+    max-width: 100%;
+    max-height: 100%;
+    object-fit: contain;
+    user-select: none;
+    -webkit-user-drag: none;
+    cursor: zoom-in;
+}
+
+.viewer-image-container.is-zoomed {
+    display: block;
+    overflow: auto;
+}
+
+.viewer-image-container.is-zoomed img {
+    max-width: none;
+    max-height: none;
+    display: block;
+    margin: 0 auto;
+    cursor: zoom-out;
+}
+
+.viewer-info {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 24px;
+    padding: 10px 16px;
+    background: rgba(0, 0, 0, 0.85);
+    font-size: 13px;
+    color: var(--text-secondary);
+    border-top: 1px solid #222;
+}
+
+.viewer-load-original-btn {
+    padding: 4px 10px;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    background: rgba(255, 255, 255, 0.05);
+    color: var(--text-primary);
+    font-size: 11px;
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+
+.viewer-load-original-btn:hover:not(:disabled) {
+    background: var(--bg-hover);
+    border-color: var(--accent);
+}
+
+.viewer-load-original-btn:disabled {
+    opacity: 0.5;
+    cursor: default;
+}
+
+.viewer-liked-indicator {
+    font-weight: 600;
+}
+
+.viewer-liked-indicator.is-liked {
+    color: var(--liked-color);
+}
+
+.viewer-liked-indicator.is-unliked {
+    color: var(--text-secondary);
+}
+
+.viewer-controls-hint {
+    padding: 6px 16px;
+    background: rgba(0, 0, 0, 0.9);
+    text-align: center;
+    font-size: 11px;
+    color: #555;
+    border-top: 1px solid #1a1a1a;
+}
+
+.viewer-close-btn {
+    position: absolute;
+    top: 12px;
+    right: 16px;
+    width: 36px;
+    height: 36px;
+    border: none;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.1);
+    color: #aaa;
+    font-size: 18px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.15s, color 0.15s;
+    z-index: 1001;
+}
+
+.viewer-close-btn:hover {
+    background: rgba(255, 255, 255, 0.2);
+    color: #fff;
+}
+
+/* ── Toast ────────────────────────────────────────────────── */
+
+.toast {
+    position: fixed;
+    bottom: 24px;
+    left: 50%;
+    transform: translateX(-50%) translateY(80px);
+    padding: 10px 20px;
+    background: var(--bg-secondary);
+    color: var(--text-primary);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    font-size: 13px;
+    z-index: 2000;
+    opacity: 0;
+    pointer-events: none;
+    transition: transform 0.25s ease, opacity 0.25s ease;
+    white-space: nowrap;
+}
+
+.toast.visible {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+    pointer-events: auto;
+}
+
+/* ── Scrollbar ────────────────────────────────────────────── */
+
+::-webkit-scrollbar {
+    width: 8px;
+}
+
+::-webkit-scrollbar-track {
+    background: var(--bg-primary);
+}
+
+::-webkit-scrollbar-thumb {
+    background: #444;
+    border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: #555;
+}
