@@ -1,10 +1,9 @@
 import os
-import io
-import zipfile
+import asyncio
 import mimetypes
 from datetime import datetime, timezone
 from fastapi import APIRouter, Query, HTTPException, Request
-from fastapi.responses import FileResponse, StreamingResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse
 from app.database import get_db
 from app.scanner import scan_photos
 from app.thumbnails import generate_thumbnail, get_cache_stats, clear_cache
@@ -16,21 +15,21 @@ router = APIRouter()
 def _build_filter_sort_sql(filter_str: str, sort_str: str):
     conditions = []
     if filter_str == "liked":
-        conditions.append("COALESCE(m.liked, 0) = 1")
+        conditions.append("liked = 1")
     elif filter_str == "unliked":
-        conditions.append("COALESCE(m.liked, 0) = 0")
+        conditions.append("liked = 0")
     
     where_clause = ""
     if conditions:
         where_clause = " WHERE " + " AND ".join(conditions)
         
     sort_map = {
-        "newest": "p.mtime DESC, p.photo_id DESC",
-        "oldest": "p.mtime ASC, p.photo_id ASC",
-        "name_asc": "p.relative_path ASC, p.photo_id ASC",
-        "name_desc": "p.relative_path DESC, p.photo_id DESC"
+        "newest": "mtime DESC, photo_id DESC",
+        "oldest": "mtime ASC, photo_id ASC",
+        "name_asc": "relative_path ASC, photo_id ASC",
+        "name_desc": "relative_path DESC, photo_id DESC"
     }
-    order_clause = f" ORDER BY {sort_map.get(sort_str, 'p.mtime DESC, p.photo_id DESC')}"
+    order_clause = f" ORDER BY {sort_map.get(sort_str, 'mtime DESC, photo_id DESC')}"
     return where_clause, order_clause
 
 
@@ -44,16 +43,14 @@ async def list_photos(
     db = await get_db()
     
     # Build query
-    base = """SELECT p.photo_id, p.relative_path, p.file_size, p.mtime,
-                     COALESCE(m.liked, 0) as liked
-              FROM photos p
-              LEFT JOIN photo_meta m ON p.photo_id = m.photo_id"""
+    base = """SELECT photo_id, relative_path, file_size, mtime, liked
+              FROM photos"""
     
     where, order = _build_filter_sort_sql(filter, sort)
     params = []
     
     # Count
-    count_query = f"SELECT COUNT(*) FROM photos p LEFT JOIN photo_meta m ON p.photo_id = m.photo_id{where}"
+    count_query = f"SELECT COUNT(*) FROM photos{where}"
     cursor = await db.execute(count_query, params)
     row = await cursor.fetchone()
     total = row[0]
@@ -92,11 +89,10 @@ async def get_photo(
 ):
     db = await get_db()
     cursor = await db.execute(
-        """SELECT p.photo_id, p.relative_path, p.absolute_path, p.file_size, p.mtime,
-                  p.width, p.height, COALESCE(m.liked, 0) as liked
-           FROM photos p
-           LEFT JOIN photo_meta m ON p.photo_id = m.photo_id
-           WHERE p.photo_id = ?""",
+        """SELECT photo_id, relative_path, absolute_path, file_size, mtime,
+                  width, height, liked
+           FROM photos
+           WHERE photo_id = ?""",
         (photo_id,)
     )
     row = await cursor.fetchone()
@@ -119,10 +115,9 @@ async def get_photo(
         where_clause, order_clause = _build_filter_sort_sql(filter, sort)
         query = f"""
             WITH ordered AS (
-                SELECT p.photo_id,
+                SELECT photo_id,
                        ROW_NUMBER() OVER ({order_clause}) as row_num
-                FROM photos p
-                LEFT JOIN photo_meta m ON p.photo_id = m.photo_id
+                FROM photos
                 {where_clause}
             ),
             target AS (
@@ -192,7 +187,10 @@ async def get_thumbnail(photo_id: str, size: int = Query(None)):
         raise HTTPException(status_code=404, detail="Original file not found")
     
     try:
-        thumb_path = generate_thumbnail(abs_path, photo_id, file_size, mtime, size)
+        # Offload blocking CPU-bound Pillow resize to worker threads to avoid freezing the event loop
+        thumb_path = await asyncio.to_thread(
+            generate_thumbnail, abs_path, photo_id, file_size, mtime, size
+        )
         return FileResponse(
             thumb_path,
             media_type="image/jpeg",
@@ -206,7 +204,7 @@ async def get_thumbnail(photo_id: str, size: int = Query(None)):
 async def get_original(photo_id: str):
     db = await get_db()
     cursor = await db.execute(
-        "SELECT absolute_path, relative_path FROM photos WHERE photo_id = ?",
+        "SELECT absolute_path FROM photos WHERE photo_id = ?",
         (photo_id,)
     )
     row = await cursor.fetchone()
@@ -237,9 +235,8 @@ async def like_photo(photo_id: str):
     
     now = datetime.now(timezone.utc).isoformat()
     await db.execute(
-        """INSERT INTO photo_meta (photo_id, liked, updated_at) VALUES (?, 1, ?)
-           ON CONFLICT(photo_id) DO UPDATE SET liked = 1, updated_at = ?""",
-        (photo_id, now, now)
+        "UPDATE photos SET liked = 1, updated_at = ? WHERE photo_id = ?",
+        (now, photo_id)
     )
     await db.commit()
     return {"photo_id": photo_id, "liked": True}
@@ -254,9 +251,8 @@ async def unlike_photo(photo_id: str):
     
     now = datetime.now(timezone.utc).isoformat()
     await db.execute(
-        """INSERT INTO photo_meta (photo_id, liked, updated_at) VALUES (?, 0, ?)
-           ON CONFLICT(photo_id) DO UPDATE SET liked = 0, updated_at = ?""",
-        (photo_id, now, now)
+        "UPDATE photos SET liked = 0, updated_at = ? WHERE photo_id = ?",
+        (now, photo_id)
     )
     await db.commit()
     return {"photo_id": photo_id, "liked": False}
@@ -270,7 +266,7 @@ async def get_counts():
     total = (await cursor.fetchone())[0]
     
     cursor = await db.execute(
-        "SELECT COUNT(*) FROM photos p INNER JOIN photo_meta m ON p.photo_id = m.photo_id WHERE m.liked = 1"
+        "SELECT COUNT(*) FROM photos WHERE liked = 1"
     )
     liked = (await cursor.fetchone())[0]
     
@@ -326,54 +322,6 @@ async def download_photo(photo_id: str):
     )
 
 
-@router.get("/api/download-liked")
-async def download_liked():
-    db = await get_db()
-    cursor = await db.execute(
-        """SELECT p.absolute_path, p.relative_path
-           FROM photos p
-           INNER JOIN photo_meta m ON p.photo_id = m.photo_id
-           WHERE m.liked = 1
-           ORDER BY p.mtime DESC"""
-    )
-    rows = await cursor.fetchall()
-    
-    if not rows:
-        raise HTTPException(status_code=404, detail="No liked photos")
-    
-    def generate_zip():
-        buffer = io.BytesIO()
-        seen_names = {}
-        with zipfile.ZipFile(buffer, "w", zipfile.ZIP_STORED) as zf:
-            for row in rows:
-                abs_path = row[0]
-                filename = os.path.basename(row[1])
-                
-                if not os.path.exists(abs_path):
-                    continue
-                
-                # Handle duplicate filenames
-                if filename in seen_names:
-                    seen_names[filename] += 1
-                    name, ext = os.path.splitext(filename)
-                    filename = f"{name}_{seen_names[filename]}{ext}"
-                else:
-                    seen_names[filename] = 0
-                
-                zf.write(abs_path, filename)
-        
-        buffer.seek(0)
-        return buffer
-    
-    zip_buffer = generate_zip()
-    
-    return StreamingResponse(
-        zip_buffer,
-        media_type="application/zip",
-        headers={"Content-Disposition": 'attachment; filename="liked_photos.zip"'}
-    )
-
-
 @router.get("/api/photo/{photo_id}/next")
 async def get_next_photo_id(
     photo_id: str,
@@ -384,10 +332,9 @@ async def get_next_photo_id(
     where_clause, order_clause = _build_filter_sort_sql(filter, sort)
     query = f"""
         WITH ordered AS (
-            SELECT p.photo_id,
+            SELECT photo_id,
                    ROW_NUMBER() OVER ({order_clause}) as row_num
-            FROM photos p
-            LEFT JOIN photo_meta m ON p.photo_id = m.photo_id
+            FROM photos
             {where_clause}
         ),
         target AS (
@@ -415,10 +362,9 @@ async def get_prev_photo_id(
     where_clause, order_clause = _build_filter_sort_sql(filter, sort)
     query = f"""
         WITH ordered AS (
-            SELECT p.photo_id,
+            SELECT photo_id,
                    ROW_NUMBER() OVER ({order_clause}) as row_num
-            FROM photos p
-            LEFT JOIN photo_meta m ON p.photo_id = m.photo_id
+            FROM photos
             {where_clause}
         ),
         target AS (
