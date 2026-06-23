@@ -303,22 +303,22 @@ async def download_photo(photo_id: str):
     row = await cursor.fetchone()
     if not row:
         raise HTTPException(status_code=404, detail="Photo not found")
-    
+
     abs_path = row[0]
     filename = os.path.basename(row[1])
-    
+
     if not os.path.exists(abs_path):
         raise HTTPException(status_code=404, detail="Original file not found")
-    
+
     media_type, _ = mimetypes.guess_type(abs_path)
     if not media_type:
         media_type = "application/octet-stream"
-    
+
     return FileResponse(
         abs_path,
         media_type=media_type,
         filename=filename,
-        headers={"Content-Disposition": f'attachment; filename="{filename}"'}
+        headers={"Content-Disposition": f'inline; filename="{filename}"'}
     )
 
 
