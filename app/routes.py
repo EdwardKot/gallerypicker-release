@@ -1,25 +1,31 @@
 import os
 import asyncio
 import mimetypes
+import aiosqlite
 from datetime import datetime, timezone
 from fastapi import APIRouter, Query, HTTPException, BackgroundTasks
 from fastapi.responses import FileResponse, JSONResponse
 from app.database import get_db
 from app.scanner import scan_photos
 from app.thumbnails import generate_thumbnail, get_cache_stats, clear_cache
-from app.config import PHOTO_ROOT, DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE
+from app.config import PHOTO_ROOT, DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE, DATABASE_PATH
 
 router = APIRouter()
 
 _scan_lock = asyncio.Lock()
 
 async def _background_rescan():
-    """Run scan_photos in the background, protected by a lock to avoid concurrent scans."""
+    """Run scan_photos with a separate DB connection to avoid blocking viewer API."""
     if _scan_lock.locked():
         return  # another scan is already in progress
     async with _scan_lock:
         try:
-            await scan_photos()
+            db = await aiosqlite.connect(DATABASE_PATH)
+            try:
+                await db.execute("PRAGMA journal_mode=WAL")
+                await scan_photos(db=db)
+            finally:
+                await db.close()
         except Exception as e:
             print(f"Background rescan error: {e}")
 

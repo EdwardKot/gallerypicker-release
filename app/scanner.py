@@ -7,12 +7,12 @@ from app.utils import compute_photo_id
 from app.database import get_db
 
 
-async def scan_photos(photo_root: str = None) -> dict:
+async def scan_photos(photo_root: str = None, db=None) -> dict:
     """Scan the photo root directory and update the SQLite index.
     Returns stats about the scan."""
     root = photo_root or PHOTO_ROOT
     root = os.path.expanduser(root)
-    
+
     if not os.path.isdir(root):
         return {
             "error": f"Photo root not found: {root}",
@@ -21,8 +21,9 @@ async def scan_photos(photo_root: str = None) -> dict:
             "updated": 0,
             "removed": 0
         }
-    
-    db = await get_db()
+
+    if db is None:
+        db = await get_db()
     now = datetime.now(timezone.utc).isoformat()
     
     # Fetch all existing records in a single query for O(1) database trip efficiency
