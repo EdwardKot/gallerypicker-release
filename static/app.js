@@ -28,6 +28,7 @@
         focusedPhotoId: null,
         isLoadingMore: false,
         hasMorePages: true,
+        likedIdsCache: null,    // 预缓存的 liked 照片 ID 列表
     };
 
     // ── DOM refs ─────────────────────────────────────────────
@@ -399,6 +400,7 @@
     function gridLike(photoId) {
         if (!photoId) return;
         state.likedSet.add(photoId);
+        if (state.likedIdsCache !== null) state.likedIdsCache.push(photoId);
         const card = $grid.querySelector(`.thumb-card[data-photo-id="${photoId}"]`);
         if (card) card.classList.add('is-liked');
         api(`/api/like/${photoId}`, { method: 'POST' }).catch(e => console.error('like failed', e));
@@ -409,6 +411,10 @@
     function gridUnlike(photoId) {
         if (!photoId) return;
         state.likedSet.delete(photoId);
+        if (state.likedIdsCache !== null) {
+            const idx = state.likedIdsCache.indexOf(photoId);
+            if (idx >= 0) state.likedIdsCache.splice(idx, 1);
+        }
         const card = $grid.querySelector(`.thumb-card[data-photo-id="${photoId}"]`);
         if (card) card.classList.remove('is-liked');
         api(`/api/unlike/${photoId}`, { method: 'POST' }).catch(e => console.error('unlike failed', e));
@@ -630,6 +636,7 @@
         const photoId = state.viewerPhotoId;
 
         state.likedSet.add(photoId);
+        if (state.likedIdsCache !== null) state.likedIdsCache.push(photoId);
         setViewerLikedUI(true);
 
         // Sync grid card state
@@ -647,6 +654,10 @@
         const photoId = state.viewerPhotoId;
 
         state.likedSet.delete(photoId);
+        if (state.likedIdsCache !== null) {
+            const idx = state.likedIdsCache.indexOf(photoId);
+            if (idx >= 0) state.likedIdsCache.splice(idx, 1);
+        }
         setViewerLikedUI(false);
 
         const card = $grid.querySelector(`.thumb-card[data-photo-id="${photoId}"]`);
@@ -1042,62 +1053,58 @@
         }
     }
 
-    // Bulk download with <a download> tags (works over HTTP, no secure context needed)
-    async function downloadBulkWithAnchors(ids) {
-        const abort = new AbortController();
-        downloadAbort = abort;
+    // 同步锚点下载：不经过 fetch，直接用 <a href> 让浏览器处理请求
+    // 第一个 a.click() 在用户手势内执行，触发 Chrome 多文件下载权限
+    // 后续通过 setTimeout 间隔触发，避免浏览器拦截并发下载
+    function downloadBulkSync(ids) {
+        if (ids.length === 0) {
+            showToast('No photos to download');
+            return;
+        }
+
+        const abort = { aborted: false };
+        downloadAbort = { abort: () => { abort.aborted = true; } };
 
         showDownloadProgress(ids.length);
         $btnDownload.disabled = true;
 
-        let completed = 0;
-        let failed = 0;
+        let triggered = 0;
 
-        for (const id of ids) {
-            if (abort.signal.aborted) break;
-            try {
-                const resp = await fetch(`/api/download/${id}`, { signal: abort.signal });
-                if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-                const disposition = resp.headers.get('Content-Disposition') || '';
-                const match = disposition.match(/filename="?([^";\n]+)"?/);
-                const filename = match ? match[1] : `photo_${id}`;
-
-                const blob = await resp.blob();
-                const url = URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = filename;
-                a.style.display = 'none';
-                document.body.appendChild(a);
-                a.click();
-                a.remove();
-                URL.revokeObjectURL(url);
-
-                completed++;
-                updateDownloadProgress(completed, ids.length, filename);
-
-                // Small delay to let the browser process each download
-                await new Promise(r => setTimeout(r, 200));
-            } catch (e) {
-                if (e.name === 'AbortError') break;
-                console.error(`download photo ${id}`, e);
-                failed++;
-                completed++;
-                updateDownloadProgress(completed, ids.length, '(skipped)');
+        function triggerNext() {
+            if (abort.aborted) {
+                hideDownloadProgress();
+                $btnDownload.disabled = false;
+                downloadAbort = null;
+                showToast(`Download cancelled (${triggered} / ${ids.length} saved)`);
+                return;
             }
+
+            if (triggered >= ids.length) {
+                hideDownloadProgress();
+                $btnDownload.disabled = false;
+                downloadAbort = null;
+                showToast(`Downloaded ${ids.length} photos ✓`);
+                return;
+            }
+
+            const id = ids[triggered];
+            const a = document.createElement('a');
+            a.href = `/api/download/${id}`;
+            a.download = '';
+            a.style.display = 'none';
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+
+            triggered++;
+            updateDownloadProgress(triggered, ids.length, '');
+
+            // 间隔 500ms 触发下一个，给浏览器处理时间
+            setTimeout(triggerNext, 500);
         }
 
-        hideDownloadProgress();
-        $btnDownload.disabled = false;
-        downloadAbort = null;
-
-        if (abort.signal.aborted) {
-            showToast(`Download cancelled (${completed - failed}/${ids.length} saved)`);
-        } else if (failed > 0) {
-            showToast(`Downloaded ${completed - failed}/${ids.length} (${failed} failed)`, 4000);
-        } else {
-            showToast(`Downloaded ${ids.length} photos ✓`);
-        }
+        // 首次调用同步执行，位于用户手势上下文内
+        triggerNext();
     }
 
     if ($downloadCancel) {
@@ -1111,74 +1118,49 @@
         return (data.photos || []).map(p => p.photo_id);
     }
 
+    // 预缓存 liked IDs，供同步下载使用
+    async function refreshLikedIdsCache() {
+        try {
+            const data = await apiJson('/api/photos?filter=liked&page_size=10000');
+            state.likedIdsCache = (data.photos || []).map(p => p.photo_id);
+        } catch (e) {
+            console.error('refreshLikedIdsCache', e);
+        }
+    }
+
     $btnDownload.addEventListener('click', async () => {
-        // File System Access API path (localhost / HTTPS only)
-        // showDirectoryPicker MUST be called before any await to preserve user gesture
+        let ids;
+        if (state.selectedSet.size > 0) {
+            // 已选中照片：ID 已在内存中，同步可用
+            ids = Array.from(state.selectedSet);
+        } else {
+            // liked 照片：使用预缓存（同步，不丢失用户手势）
+            if (state.likedIdsCache && state.likedIdsCache.length > 0) {
+                ids = state.likedIdsCache;
+            } else {
+                showToast('No liked photos found');
+                return;
+            }
+        }
+
+        // 优先尝试 File System Access API（localhost / HTTPS 下可用，支持选目录）
         if (window.showDirectoryPicker) {
             let dirHandle;
             try {
                 dirHandle = await window.showDirectoryPicker({ mode: 'readwrite' });
             } catch (e) {
-                if (e.name === 'AbortError') {
-                    // User cancelled the picker — fall through to anchor-based fallback
-                    dirHandle = undefined;
-                } else {
-                    console.error('showDirectoryPicker', e);
-                    return;
-                }
+                if (e.name === 'AbortError') return;
+                console.error('showDirectoryPicker', e);
+                // 失败则走同步回退
             }
             if (dirHandle) {
-                // Resolve IDs (may need API call for liked photos)
-                let ids;
-                if (state.selectedSet.size > 0) {
-                    ids = Array.from(state.selectedSet);
-                } else {
-                    $btnDownload.disabled = true;
-                    try { ids = await fetchLikedIds(); } catch (e) {
-                        console.error('fetchLikedIds', e);
-                        showToast('Failed to load liked photos');
-                        $btnDownload.disabled = false;
-                        return;
-                    }
-                    $btnDownload.disabled = false;
-                    if (ids.length === 0) { showToast('No liked photos found'); return; }
-                }
                 await downloadBulkWithFSAccess(dirHandle, ids);
                 return;
             }
         }
 
-        // Fallback: synchronous <a download> tags (works over HTTP)
-        // NO await between click handler and anchor creation — user gesture must be preserved
-
-        if (state.selectedSet.size > 0) {
-            // Selected photos: IDs are already in memory, create anchors synchronously
-            const ids = Array.from(state.selectedSet);
-            showToast(`Downloading ${ids.length} selected photos…`);
-            ids.forEach((id, i) => {
-                setTimeout(() => downloadWithAnchor(id), i * 300);
-            });
-            return;
-        }
-
-        // Download Liked (no selection): need to fetch IDs from API first
-        // Note: over plain HTTP, the async fetch breaks user gesture, so bulk anchor
-        // clicks may be blocked by the browser. Works best on localhost/HTTPS.
-        let ids;
-        $btnDownload.disabled = true;
-        try { ids = await fetchLikedIds(); } catch (e) {
-            console.error('fetchLikedIds', e);
-            showToast('Failed to load liked photos');
-            $btnDownload.disabled = false;
-            return;
-        }
-        $btnDownload.disabled = false;
-        if (ids.length === 0) { showToast('No liked photos found'); return; }
-
-        showToast(`Downloading ${ids.length} liked photos…`);
-        ids.forEach((id, i) => {
-            setTimeout(() => downloadWithAnchor(id), i * 300);
-        });
+        // HTTP 回退：同步锚点下载（保留用户手势，不经过 fetch）
+        downloadBulkSync(ids);
     });
 
     // ── Init ─────────────────────────────────────────────────
@@ -1194,6 +1176,7 @@
         try {
             await fetchCounts();
             await fetchPhotos();
+            await refreshLikedIdsCache();
         } catch (e) {
             console.error('init', e);
             showToast('Failed to initialize');
