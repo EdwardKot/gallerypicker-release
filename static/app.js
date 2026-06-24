@@ -59,6 +59,12 @@
     const $settingsPreviewSize = document.getElementById('settings-preview-size');
     const $countAll = document.getElementById('count-all');
     const $countLiked = document.getElementById('count-liked');
+    const $downloadOverlay = document.getElementById('download-overlay');
+    const $downloadCancel = document.getElementById('download-cancel');
+    const $downloadCurrent = document.getElementById('download-current');
+    const $downloadTotal = document.getElementById('download-total');
+    const $downloadFilename = document.getElementById('download-filename');
+    const $downloadProgressFill = document.getElementById('download-progress-fill');
 
     // ── Helpers ──────────────────────────────────────────────
 
@@ -655,7 +661,7 @@
                 case 'KeyD':
                     e.preventDefault();
                     if (state.viewerPhotoId) {
-                        downloadWithIframe(state.viewerPhotoId);
+                        downloadSingleFile(state.viewerPhotoId);
                     }
                     break;
                 case 'Escape':
@@ -735,7 +741,7 @@
             if ($btnClearSelection) $btnClearSelection.style.display = '';
         } else {
             $btnDownload.textContent = '⬇ Download Liked';
-            $btnDownload.title = 'Download liked photos as ZIP';
+            $btnDownload.title = 'Download liked photos';
             if ($btnClearSelection) $btnClearSelection.style.display = 'none';
         }
     }
@@ -832,7 +838,7 @@
     if ($viewerDownload) {
         $viewerDownload.addEventListener('click', () => {
             if (state.viewerPhotoId) {
-                downloadWithIframe(state.viewerPhotoId);
+                downloadSingleFile(state.viewerPhotoId);
             }
         });
     }
@@ -895,29 +901,168 @@
         setTimeout(() => { if (iframe.parentNode) iframe.parentNode.removeChild(iframe); }, 5000);
     }
 
-    $btnDownload.addEventListener('click', () => {
+    const fsAccessSupported = !!window.showSaveFilePicker;
+
+    async function downloadSingleFile(id) {
+        if (!fsAccessSupported) {
+            downloadWithIframe(id);
+            return;
+        }
+        try {
+            const resp = await fetch(`/api/download/${id}`);
+            if (!resp.ok) throw new Error(`Download failed: ${resp.status}`);
+            const disposition = resp.headers.get('Content-Disposition') || '';
+            const match = disposition.match(/filename="?([^";\n]+)"?/);
+            const filename = match ? match[1] : `photo_${id}`;
+            const blob = await resp.blob();
+            const handle = await window.showSaveFilePicker({ suggestedName: filename });
+            const writable = await handle.createWritable();
+            await writable.write(blob);
+            await writable.close();
+        } catch (e) {
+            if (e.name === 'AbortError') return; // user cancelled
+            console.error('downloadSingleFile', e);
+            showToast('Download failed');
+        }
+    }
+
+    function getUniqueFilename(name, existingNames) {
+        if (!existingNames.has(name)) return name;
+        const dot = name.lastIndexOf('.');
+        const base = dot > 0 ? name.substring(0, dot) : name;
+        const ext = dot > 0 ? name.substring(dot) : '';
+        let i = 1;
+        while (existingNames.has(`${base}_${i}${ext}`)) i++;
+        return `${base}_${i}${ext}`;
+    }
+
+    let downloadAbort = null;
+
+    function showDownloadProgress(total) {
+        $downloadCurrent.textContent = '0';
+        $downloadTotal.textContent = String(total);
+        $downloadFilename.textContent = '';
+        $downloadProgressFill.style.width = '0%';
+        $downloadOverlay.style.display = '';
+    }
+
+    function updateDownloadProgress(current, total, filename) {
+        $downloadCurrent.textContent = String(current);
+        $downloadFilename.textContent = filename;
+        $downloadProgressFill.style.width = `${((current) / total * 100).toFixed(1)}%`;
+    }
+
+    function hideDownloadProgress() {
+        $downloadOverlay.style.display = 'none';
+    }
+
+    async function downloadBulkPhotos(ids) {
+        if (ids.length === 0) {
+            showToast('No photos to download');
+            return;
+        }
+
+        if (!fsAccessSupported) {
+            // Fallback: use iframes for each file
+            showToast(`Downloading ${ids.length} photos…`);
+            ids.forEach(downloadWithIframe);
+            return;
+        }
+
+        let dirHandle;
+        try {
+            dirHandle = await window.showDirectoryPicker({ mode: 'readwrite' });
+        } catch (e) {
+            if (e.name === 'AbortError') return; // user cancelled folder picker
+            console.error('showDirectoryPicker', e);
+            showToast('Folder selection failed');
+            return;
+        }
+
+        const abort = new AbortController();
+        downloadAbort = abort;
+
+        showDownloadProgress(ids.length);
+        $btnDownload.disabled = true;
+
+        const existingNames = new Set();
+        // Pre-populate with files already in the directory
+        try {
+            for await (const entry of dirHandle.values()) {
+                if (entry.kind === 'file') existingNames.add(entry.name);
+            }
+        } catch (_) { /* ignore */ }
+
+        let completed = 0;
+        let failed = 0;
+
+        for (const id of ids) {
+            if (abort.signal.aborted) break;
+            try {
+                const resp = await fetch(`/api/download/${id}`, { signal: abort.signal });
+                if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+                const disposition = resp.headers.get('Content-Disposition') || '';
+                const match = disposition.match(/filename="?([^";\n]+)"?/);
+                let filename = match ? match[1] : `photo_${id}`;
+                filename = getUniqueFilename(filename, existingNames);
+                existingNames.add(filename);
+
+                const blob = await resp.blob();
+                const fileHandle = await dirHandle.getFileHandle(filename, { create: true });
+                const writable = await fileHandle.createWritable();
+                await writable.write(blob);
+                await writable.close();
+
+                completed++;
+                updateDownloadProgress(completed, ids.length, filename);
+            } catch (e) {
+                if (e.name === 'AbortError') break;
+                console.error(`download photo ${id}`, e);
+                failed++;
+                completed++;
+                updateDownloadProgress(completed, ids.length, '(skipped)');
+            }
+        }
+
+        hideDownloadProgress();
+        $btnDownload.disabled = false;
+        downloadAbort = null;
+
+        if (abort.signal.aborted) {
+            showToast(`Download cancelled (${completed - failed}/${ids.length} saved)`);
+        } else if (failed > 0) {
+            showToast(`Downloaded ${completed - failed}/${ids.length} (${failed} failed)`, 4000);
+        } else {
+            showToast(`Downloaded ${ids.length} photos ✓`);
+        }
+    }
+
+    if ($downloadCancel) {
+        $downloadCancel.addEventListener('click', () => {
+            if (downloadAbort) downloadAbort.abort();
+        });
+    }
+
+    $btnDownload.addEventListener('click', async () => {
         if (state.selectedSet.size > 0) {
             const ids = Array.from(state.selectedSet);
-            showToast(`Downloading ${ids.length} selected photos…`);
-            ids.forEach(downloadWithIframe);
-            $btnDownload.disabled = false;
+            await downloadBulkPhotos(ids);
         } else {
-            showToast('Requesting liked list…');
             $btnDownload.disabled = true;
-            apiJson('/api/photos?filter=liked&page_size=10000').then(data => {
-                $btnDownload.disabled = false;
+            try {
+                const data = await apiJson('/api/photos?filter=liked&page_size=10000');
                 const ids = (data.photos || []).map(p => p.photo_id);
                 if (ids.length === 0) {
                     showToast('No liked photos found');
                     return;
                 }
-                showToast(`Downloading ${ids.length} liked photos…`);
-                ids.forEach(downloadWithIframe);
-            }).catch(e => {
-                $btnDownload.disabled = false;
+                await downloadBulkPhotos(ids);
+            } catch (e) {
                 console.error('downloadLiked', e);
                 showToast('Download failed');
-            });
+            } finally {
+                $btnDownload.disabled = false;
+            }
         }
     });
 

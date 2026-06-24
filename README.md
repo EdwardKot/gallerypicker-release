@@ -72,25 +72,59 @@ pkg install rust binutils -y
 pip install -r requirements.txt
 ```
 
-### 4. Run the server
+### 4. Create run.sh (recommended)
+
+```bash
+cat > ~/gallerypicker/run.sh << 'EOF'
+#!/data/data/com.termux/files/usr/bin/bash
+cd "$(dirname "$0")"
+mkdir -p data cache
+export PHOTO_ROOT=/storage/emulated/0/DCIM/Camera
+export DATABASE_PATH="$PWD/data/gallery.db"
+export CACHE_DIR="$PWD/cache"
+python -m uvicorn app.main:app --host 0.0.0.0 --port 8787
+EOF
+chmod +x ~/gallerypicker/run.sh
+```
+
+### 5. Create update.sh (recommended)
+
+```bash
+cat > ~/gallerypicker/update.sh << 'EOF'
+#!/data/data/com.termux/files/usr/bin/bash
+set -e
+cd "$(dirname "$0")"
+git pull
+pip install -r requirements.txt
+mkdir -p data cache
+echo "Update complete. Run with: ./run.sh"
+EOF
+chmod +x ~/gallerypicker/update.sh
+```
+
+### 6. Start
 
 ```bash
 cd ~/gallerypicker
-mkdir -p data cache
-export PHOTO_ROOT=/storage/emulated/0/DCIM/Camera
-export DATABASE_PATH=$PWD/data/gallery.db
-export CACHE_DIR=$PWD/cache
-python -m uvicorn app.main:app --host 0.0.0.0 --port 8787
+./run.sh
 ```
 
 When it works, you should see:
 
 ```
-Application startup complete.
-Uvicorn running on http://0.0.0.0:8787
+============================================================
+  Gallery Picker
+============================================================
+  Photo root : /storage/emulated/0/DCIM/Camera
+  Server     : http://0.0.0.0:8787
+============================================================
+
+  Stop        Ctrl+C
+  Restart     ./run.sh
+  Update      ./update.sh
 ```
 
-### 5. Open in browser
+### 7. Open in browser
 
 On the phone:
 
@@ -116,101 +150,39 @@ Example:
 http://192.168.1.157:8787
 ```
 
-### 6. Stop the server
+## Daily Usage
 
-Press:
-
-```
-Ctrl + C
-```
-
-### 7. Restart later
+After first-time setup, you only need these three commands:
 
 ```bash
 cd ~/gallerypicker
+
+./run.sh        # Start
+./update.sh     # Update to latest version
+Ctrl+C          # Stop (in the Termux terminal running the server)
+```
+
+All three are also shown in the terminal every time the server starts.
+
+### If not using run.sh / update.sh
+
+Start manually:
+
+```bash
+cd ~/gallerypicker
+mkdir -p data cache
 export PHOTO_ROOT=/storage/emulated/0/DCIM/Camera
 export DATABASE_PATH=$PWD/data/gallery.db
 export CACHE_DIR=$PWD/cache
 python -m uvicorn app.main:app --host 0.0.0.0 --port 8787
 ```
 
-### 8. Update later
+Update manually:
 
 ```bash
 cd ~/gallerypicker
 git pull
 pip install -r requirements.txt
-```
-
-Then start again with the run command above.
-
-## Recommended: create run.sh
-
-Create `run.sh` in the project root:
-
-```bash
-#!/data/data/com.termux/files/usr/bin/bash
-cd "$(dirname "$0")"
-mkdir -p data cache
-export PHOTO_ROOT=/storage/emulated/0/DCIM/Camera
-export DATABASE_PATH="$PWD/data/gallery.db"
-export CACHE_DIR="$PWD/cache"
-python -m uvicorn app.main:app --host 0.0.0.0 --port 8787
-```
-
-Make it executable:
-
-```bash
-chmod +x run.sh
-```
-
-Then start the app with:
-
-```bash
-cd ~/gallerypicker
-./run.sh
-```
-
-## Recommended: create update.sh
-
-Create `update.sh`:
-
-```bash
-#!/data/data/com.termux/files/usr/bin/bash
-set -e
-cd "$(dirname "$0")"
-git pull
-pip install -r requirements.txt
-mkdir -p data cache
-echo "Update complete."
-echo "Run with: ./run.sh"
-```
-
-Make it executable:
-
-```bash
-chmod +x update.sh
-```
-
-Then update with:
-
-```bash
-cd ~/gallerypicker
-./update.sh
-```
-
-## Find Your Phone's IP
-
-```bash
-ip addr show wlan0
-```
-
-Look for the `inet` address (e.g., `192.168.1.42`).
-
-Then open from your Mac browser:
-
-```
-http://192.168.1.42:8787
 ```
 
 ## Configuration

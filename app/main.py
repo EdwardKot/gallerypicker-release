@@ -13,11 +13,18 @@ from app.routes import router
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup
-    print(f"\n{'='*60}")
+    print()
+    print(f"{'='*60}")
     print(f"  Gallery Picker")
-    print(f"  Photo root: {os.path.expanduser(PHOTO_ROOT)}")
-    print(f"  Server: http://{HOST}:{PORT}")
-    print(f"{'='*60}\n")
+    print(f"{'='*60}")
+    print(f"  Photo root : {os.path.expanduser(PHOTO_ROOT)}")
+    print(f"  Server     : http://{HOST}:{PORT}")
+    print(f"{'='*60}")
+    print()
+    print("  Stop        Ctrl+C")
+    print("  Restart     ./run.sh")
+    print("  Update      ./update.sh")
+    print()
     
     # Initialize database
     await get_db()
