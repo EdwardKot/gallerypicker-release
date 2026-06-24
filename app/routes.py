@@ -2,7 +2,7 @@ import os
 import asyncio
 import mimetypes
 from datetime import datetime, timezone
-from fastapi import APIRouter, Query, HTTPException
+from fastapi import APIRouter, Query, HTTPException, BackgroundTasks
 from fastapi.responses import FileResponse, JSONResponse
 from app.database import get_db
 from app.scanner import scan_photos
@@ -10,6 +10,18 @@ from app.thumbnails import generate_thumbnail, get_cache_stats, clear_cache
 from app.config import PHOTO_ROOT, DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE
 
 router = APIRouter()
+
+_scan_lock = asyncio.Lock()
+
+async def _background_rescan():
+    """Run scan_photos in the background, protected by a lock to avoid concurrent scans."""
+    if _scan_lock.locked():
+        return  # another scan is already in progress
+    async with _scan_lock:
+        try:
+            await scan_photos()
+        except Exception as e:
+            print(f"Background rescan error: {e}")
 
 
 def _build_filter_sort_sql(filter_str: str, sort_str: str):
@@ -35,6 +47,7 @@ def _build_filter_sort_sql(filter_str: str, sort_str: str):
 
 @router.get("/api/photos")
 async def list_photos(
+    background_tasks: BackgroundTasks,
     filter: str = Query("all", pattern="^(all|liked|unliked)$"),
     sort: str = Query("newest", pattern="^(newest|oldest|name_asc|name_desc)$"),
     page: int = Query(1, ge=1),
@@ -71,14 +84,20 @@ async def list_photos(
             "liked": bool(row[4]),
             "filename": os.path.basename(row[1])
         })
-    
-    return {
-        "photos": photos,
-        "total": total,
-        "page": page,
-        "page_size": page_size,
-        "total_pages": (total + page_size - 1) // page_size if total > 0 else 0
-    }
+
+    # Auto-rescan in background so new photos appear without manual rescan
+    background_tasks.add_task(_background_rescan)
+
+    return JSONResponse(
+        content={
+            "photos": photos,
+            "total": total,
+            "page": page,
+            "page_size": page_size,
+            "total_pages": (total + page_size - 1) // page_size if total > 0 else 0
+        },
+        headers={"Cache-Control": "no-cache, no-store, must-revalidate"}
+    )
 
 
 @router.get("/api/photo/{photo_id}")

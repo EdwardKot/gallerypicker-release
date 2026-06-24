@@ -70,6 +70,7 @@ async def init_db(db: aiosqlite.Connection):
     # 4. Now that columns are guaranteed to exist, create indexes safely
     await db.executescript("""
         CREATE INDEX IF NOT EXISTS idx_photos_mtime ON photos(mtime DESC);
+        CREATE INDEX IF NOT EXISTS idx_photos_mtime_id ON photos(mtime DESC, photo_id DESC);
         CREATE INDEX IF NOT EXISTS idx_photos_relative_path ON photos(relative_path);
         CREATE INDEX IF NOT EXISTS idx_photos_liked ON photos(liked);
     """)

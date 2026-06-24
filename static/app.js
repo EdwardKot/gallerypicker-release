@@ -890,37 +890,18 @@
         }
     });
 
-    function downloadWithIframe(id) {
-        const iframe = document.createElement('iframe');
-        iframe.style.display = 'none';
-        iframe.src = `/api/download/${id}`;
-        document.body.appendChild(iframe);
-        setTimeout(() => { if (iframe.parentNode) iframe.parentNode.removeChild(iframe); }, 5000);
+    function downloadWithAnchor(id, filename) {
+        const a = document.createElement('a');
+        a.href = `/api/download/${id}`;
+        a.download = filename || '';
+        a.style.display = 'none';
+        document.body.appendChild(a);
+        a.click();
+        setTimeout(() => a.remove(), 100);
     }
 
-    const fsAccessSupported = !!window.showSaveFilePicker;
-
-    async function downloadSingleFile(id) {
-        if (!fsAccessSupported) {
-            downloadWithIframe(id);
-            return;
-        }
-        try {
-            const resp = await fetch(`/api/download/${id}`);
-            if (!resp.ok) throw new Error(`Download failed: ${resp.status}`);
-            const disposition = resp.headers.get('Content-Disposition') || '';
-            const match = disposition.match(/filename="?([^";\n]+)"?/);
-            const filename = match ? match[1] : `photo_${id}`;
-            const blob = await resp.blob();
-            const handle = await window.showSaveFilePicker({ suggestedName: filename });
-            const writable = await handle.createWritable();
-            await writable.write(blob);
-            await writable.close();
-        } catch (e) {
-            if (e.name === 'AbortError') return; // user cancelled
-            console.error('downloadSingleFile', e);
-            showToast('Download failed');
-        }
+    function downloadSingleFile(id) {
+        downloadWithAnchor(id);
     }
 
     function getUniqueFilename(name, existingNames) {
@@ -953,12 +934,8 @@
         $downloadOverlay.style.display = 'none';
     }
 
-    async function downloadBulkPhotos(dirHandle, ids) {
-        if (ids.length === 0) {
-            showToast('No photos to download');
-            return;
-        }
-
+    // Bulk download with File System Access API (works on localhost/HTTPS)
+    async function downloadBulkWithFSAccess(dirHandle, ids) {
         const abort = new AbortController();
         downloadAbort = abort;
 
@@ -966,7 +943,6 @@
         $btnDownload.disabled = true;
 
         const existingNames = new Set();
-        // Pre-populate with files already in the directory
         try {
             for await (const entry of dirHandle.values()) {
                 if (entry.kind === 'file') existingNames.add(entry.name);
@@ -1017,6 +993,64 @@
         }
     }
 
+    // Bulk download with <a download> tags (works over HTTP, no secure context needed)
+    async function downloadBulkWithAnchors(ids) {
+        const abort = new AbortController();
+        downloadAbort = abort;
+
+        showDownloadProgress(ids.length);
+        $btnDownload.disabled = true;
+
+        let completed = 0;
+        let failed = 0;
+
+        for (const id of ids) {
+            if (abort.signal.aborted) break;
+            try {
+                const resp = await fetch(`/api/download/${id}`, { signal: abort.signal });
+                if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+                const disposition = resp.headers.get('Content-Disposition') || '';
+                const match = disposition.match(/filename="?([^";\n]+)"?/);
+                const filename = match ? match[1] : `photo_${id}`;
+
+                const blob = await resp.blob();
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = filename;
+                a.style.display = 'none';
+                document.body.appendChild(a);
+                a.click();
+                a.remove();
+                URL.revokeObjectURL(url);
+
+                completed++;
+                updateDownloadProgress(completed, ids.length, filename);
+
+                // Small delay to let the browser process each download
+                await new Promise(r => setTimeout(r, 200));
+            } catch (e) {
+                if (e.name === 'AbortError') break;
+                console.error(`download photo ${id}`, e);
+                failed++;
+                completed++;
+                updateDownloadProgress(completed, ids.length, '(skipped)');
+            }
+        }
+
+        hideDownloadProgress();
+        $btnDownload.disabled = false;
+        downloadAbort = null;
+
+        if (abort.signal.aborted) {
+            showToast(`Download cancelled (${completed - failed}/${ids.length} saved)`);
+        } else if (failed > 0) {
+            showToast(`Downloaded ${completed - failed}/${ids.length} (${failed} failed)`, 4000);
+        } else {
+            showToast(`Downloaded ${ids.length} photos ✓`);
+        }
+    }
+
     if ($downloadCancel) {
         $downloadCancel.addEventListener('click', () => {
             if (downloadAbort) downloadAbort.abort();
@@ -1029,33 +1063,7 @@
     }
 
     $btnDownload.addEventListener('click', async () => {
-        // Check File System Access support first
-        if (!window.showDirectoryPicker) {
-            // Fallback: iframe downloads
-            let ids;
-            if (state.selectedSet.size > 0) {
-                ids = Array.from(state.selectedSet);
-            } else {
-                try { ids = await fetchLikedIds(); } catch (_) { showToast('Download failed'); return; }
-                if (!ids.length) { showToast('No liked photos found'); return; }
-            }
-            showToast(`Downloading ${ids.length} photos…`);
-            ids.forEach(downloadWithIframe);
-            return;
-        }
-
-        // Call showDirectoryPicker synchronously within the click gesture
-        let dirHandle;
-        try {
-            dirHandle = await window.showDirectoryPicker({ mode: 'readwrite' });
-        } catch (e) {
-            if (e.name === 'AbortError') return; // user cancelled
-            console.error('showDirectoryPicker', e);
-            showToast('Folder selection failed');
-            return;
-        }
-
-        // Resolve photo IDs (may need an API call for liked photos)
+        // Resolve photo IDs first (may need API call for liked photos)
         let ids;
         if (state.selectedSet.size > 0) {
             ids = Array.from(state.selectedSet);
@@ -1069,14 +1077,31 @@
                 $btnDownload.disabled = false;
                 return;
             }
+            $btnDownload.disabled = false;
             if (ids.length === 0) {
                 showToast('No liked photos found');
-                $btnDownload.disabled = false;
                 return;
             }
         }
 
-        await downloadBulkPhotos(dirHandle, ids);
+        // Try File System Access API first (works on localhost / HTTPS)
+        if (window.showDirectoryPicker) {
+            let dirHandle;
+            try {
+                dirHandle = await window.showDirectoryPicker({ mode: 'readwrite' });
+            } catch (e) {
+                if (e.name === 'AbortError') return;
+                console.error('showDirectoryPicker', e);
+                // Fall through to anchor-based download
+            }
+            if (dirHandle) {
+                await downloadBulkWithFSAccess(dirHandle, ids);
+                return;
+            }
+        }
+
+        // Fallback: <a download> tags with progress (works over HTTP)
+        await downloadBulkWithAnchors(ids);
     });
 
     // ── Init ─────────────────────────────────────────────────
