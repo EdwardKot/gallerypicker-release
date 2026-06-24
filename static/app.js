@@ -842,18 +842,13 @@
 
     // Grid: single click = focus, double click = open viewer, shift/cmd click = select
     $grid.addEventListener('click', (e) => {
-        const header = e.target.closest('.date-header');
-        if (header) {
-            // Clicking the date header text / gap: nothing else to do here
-            return;
-        }
-
         const dateCheckbox = e.target.closest('.date-checkbox');
         if (dateCheckbox) {
             e.stopPropagation();
-            const checked = dateCheckbox.checked;
             const date = dateCheckbox.dataset.date;
             const cardsOfDate = $grid.querySelectorAll(`.thumb-card[data-date="${date}"]`);
+            // After browser toggles the checkbox, read the new state
+            const checked = dateCheckbox.checked;
             cardsOfDate.forEach(card => {
                 const photoId = card.dataset.photoId;
                 if (checked) {
@@ -866,6 +861,12 @@
             });
             updateDownloadButton();
             syncDateCheckboxes();
+            return;
+        }
+
+        const header = e.target.closest('.date-header');
+        if (header) {
+            // Clicked on date text / gap (not the checkbox): do nothing
             return;
         }
 
