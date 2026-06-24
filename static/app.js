@@ -530,16 +530,18 @@
             .then(photo => {
                 if (state.viewerPhotoId !== expectedId) return;
 
+                // Always update filename
                 $viewerFilenameBottom.textContent = photo.filename || photoId;
 
-                if (photo.index !== undefined && photo.index !== -1) {
+                // Update position only if API returned valid index
+                if (photo.index !== undefined && photo.index !== -1 && photo.total > 0) {
                     state.viewerIndex = photo.index - 1;
                     state.totalPhotos = photo.total;
                     $viewerPosition.textContent = `${photo.index} / ${photo.total}`;
-                } else {
-                    $viewerPosition.textContent = '';
                 }
+                // else: keep the grid-populated position from openViewer()
 
+                // Update liked state
                 const liked = !!photo.liked;
                 if (liked) {
                     state.likedSet.add(photoId);
@@ -548,8 +550,13 @@
                 }
                 setViewerLikedUI(liked);
 
-                state.viewerNextIds = photo.next_ids || [];
-                state.viewerPrevIds = photo.prev_ids || [];
+                // Only overwrite nav IDs if API returned valid non-empty arrays
+                if (photo.next_ids && photo.next_ids.length > 0) {
+                    state.viewerNextIds = photo.next_ids;
+                }
+                if (photo.prev_ids && photo.prev_ids.length > 0) {
+                    state.viewerPrevIds = photo.prev_ids;
+                }
                 preloadNearbyList(state.viewerPrevIds, state.viewerNextIds);
             })
             .catch(err => {
@@ -1112,8 +1119,13 @@
             try {
                 dirHandle = await window.showDirectoryPicker({ mode: 'readwrite' });
             } catch (e) {
-                if (e.name === 'AbortError') return;
-                console.error('showDirectoryPicker', e);
+                if (e.name === 'AbortError') {
+                    // User cancelled the picker — fall through to anchor-based fallback
+                    dirHandle = undefined;
+                } else {
+                    console.error('showDirectoryPicker', e);
+                    return;
+                }
             }
             if (dirHandle) {
                 // Resolve IDs (may need API call for liked photos)
@@ -1136,23 +1148,37 @@
             }
         }
 
-        // Fallback: <a download> tags (works over HTTP, no secure context needed)
-        // Resolve IDs first (no showDirectoryPicker to worry about)
-        let ids;
+        // Fallback: synchronous <a download> tags (works over HTTP)
+        // NO await between click handler and anchor creation — user gesture must be preserved
+
         if (state.selectedSet.size > 0) {
-            ids = Array.from(state.selectedSet);
-        } else {
-            $btnDownload.disabled = true;
-            try { ids = await fetchLikedIds(); } catch (e) {
-                console.error('fetchLikedIds', e);
-                showToast('Failed to load liked photos');
-                $btnDownload.disabled = false;
-                return;
-            }
-            $btnDownload.disabled = false;
-            if (ids.length === 0) { showToast('No liked photos found'); return; }
+            // Selected photos: IDs are already in memory, create anchors synchronously
+            const ids = Array.from(state.selectedSet);
+            showToast(`Downloading ${ids.length} selected photos…`);
+            ids.forEach((id, i) => {
+                setTimeout(() => downloadWithAnchor(id), i * 300);
+            });
+            return;
         }
-        await downloadBulkWithAnchors(ids);
+
+        // Download Liked (no selection): need to fetch IDs from API first
+        // Note: over plain HTTP, the async fetch breaks user gesture, so bulk anchor
+        // clicks may be blocked by the browser. Works best on localhost/HTTPS.
+        let ids;
+        $btnDownload.disabled = true;
+        try { ids = await fetchLikedIds(); } catch (e) {
+            console.error('fetchLikedIds', e);
+            showToast('Failed to load liked photos');
+            $btnDownload.disabled = false;
+            return;
+        }
+        $btnDownload.disabled = false;
+        if (ids.length === 0) { showToast('No liked photos found'); return; }
+
+        showToast(`Downloading ${ids.length} liked photos…`);
+        ids.forEach((id, i) => {
+            setTimeout(() => downloadWithAnchor(id), i * 300);
+        });
     });
 
     // ── Init ─────────────────────────────────────────────────

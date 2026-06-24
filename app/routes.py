@@ -183,7 +183,8 @@ async def get_photo(
                 "prev_ids": prev_ids,
                 "next_ids": next_ids
             })
-        except Exception:
+        except Exception as e:
+            print(f"[get_photo] neighbor query failed for {photo_id}: {e}")
             res.update({
                 "index": -1,
                 "total": 0,
