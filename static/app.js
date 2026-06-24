@@ -434,6 +434,7 @@
         showViewerPhoto(photoId);
         $viewer.style.display = '';
         document.body.style.overflow = 'hidden';
+        showViewerBars();
     }
 
     const $viewerImgContainer = $viewer.querySelector('.viewer-image-container');
