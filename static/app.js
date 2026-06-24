@@ -36,7 +36,6 @@
     const $empty = document.getElementById('empty-state');
     const $viewer = document.getElementById('viewer');
     const $viewerImg = document.getElementById('viewer-img');
-    const $viewerFilename = document.getElementById('viewer-filename');
     const $viewerPosition = document.getElementById('viewer-position');
     const $viewerLiked = document.getElementById('viewer-liked');
     const $viewerFilenameBottom = document.getElementById('viewer-filename-bottom');
@@ -518,7 +517,6 @@
             .then(photo => {
                 if (state.viewerPhotoId !== expectedId) return;
 
-                $viewerFilename.textContent = photo.filename || photoId;
                 $viewerFilenameBottom.textContent = photo.filename || photoId;
 
                 if (photo.index !== undefined && photo.index !== -1) {
@@ -544,7 +542,6 @@
             .catch(err => {
                 console.error('updateViewerInfo failed', err);
                 if (state.viewerPhotoId === expectedId) {
-                    $viewerFilename.textContent = photoId;
                     $viewerFilenameBottom.textContent = photoId;
                     $viewerPosition.textContent = '';
                 }
