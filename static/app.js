@@ -427,9 +427,21 @@
         state.scrollPosition = window.scrollY;
         state.viewerActive = true;
         state.viewerPhotoId = photoId;
-        state.viewerIndex = -1;
-        state.viewerNextIds = [];
-        state.viewerPrevIds = [];
+        state.viewerIsOriginal = false;
+
+        // Immediately populate navigation from grid data (works even if API is slow)
+        const cards = Array.from($grid.querySelectorAll('.thumb-card'));
+        const idx = cards.findIndex(c => c.dataset.photoId === photoId);
+        if (idx !== -1) {
+            state.viewerIndex = idx;
+            state.totalPhotos = cards.length;
+            state.viewerPrevIds = idx > 0 ? cards.slice(Math.max(0, idx - 3), idx).map(c => c.dataset.photoId).reverse() : [];
+            state.viewerNextIds = idx < cards.length - 1 ? cards.slice(idx + 1, Math.min(cards.length, idx + 4)).map(c => c.dataset.photoId) : [];
+            $viewerPosition.textContent = `${idx + 1} / ${cards.length}`;
+        }
+
+        // Immediately set liked state from known data
+        setViewerLikedUI(state.likedSet.has(photoId));
 
         showViewerPhoto(photoId);
         $viewer.style.display = '';
@@ -544,7 +556,7 @@
                 console.error('updateViewerInfo failed', err);
                 if (state.viewerPhotoId === expectedId) {
                     $viewerFilenameBottom.textContent = photoId;
-                    $viewerPosition.textContent = '';
+                    // Keep grid-populated position and liked state (don't clear them)
                 }
             });
     }
@@ -564,6 +576,10 @@
             const prevId = state.viewerPrevIds.shift();
             state.viewerNextIds.unshift(state.viewerPhotoId);
             state.viewerPhotoId = prevId;
+            if (state.viewerIndex > 0) state.viewerIndex--;
+            $viewerPosition.textContent = `${state.viewerIndex + 1} / ${state.totalPhotos}`;
+            setViewerLikedUI(state.likedSet.has(prevId));
+            extendViewerNavFromGrid();
             showViewerPhoto(prevId);
         }
     }
@@ -573,7 +589,32 @@
             const nextId = state.viewerNextIds.shift();
             state.viewerPrevIds.unshift(state.viewerPhotoId);
             state.viewerPhotoId = nextId;
+            if (state.viewerIndex < state.totalPhotos - 1) state.viewerIndex++;
+            $viewerPosition.textContent = `${state.viewerIndex + 1} / ${state.totalPhotos}`;
+            setViewerLikedUI(state.likedSet.has(nextId));
+            extendViewerNavFromGrid();
             showViewerPhoto(nextId);
+        }
+    }
+
+    function extendViewerNavFromGrid() {
+        // Replenish prev/next IDs from grid data when running low
+        const cards = Array.from($grid.querySelectorAll('.thumb-card'));
+        const idx = state.viewerIndex;
+        if (idx < 0 || idx >= cards.length) return;
+        if (state.viewerNextIds.length < 2) {
+            const start = idx + 1 + state.viewerNextIds.length;
+            const end = Math.min(cards.length, start + 3);
+            for (let i = start; i < end; i++) {
+                state.viewerNextIds.push(cards[i].dataset.photoId);
+            }
+        }
+        if (state.viewerPrevIds.length < 2) {
+            const end = idx - state.viewerPrevIds.length;
+            const start = Math.max(0, end - 3);
+            for (let i = end - 1; i >= start; i--) {
+                state.viewerPrevIds.push(cards[i].dataset.photoId);
+            }
         }
     }
 
@@ -1064,28 +1105,8 @@
     }
 
     $btnDownload.addEventListener('click', async () => {
-        // Resolve photo IDs first (may need API call for liked photos)
-        let ids;
-        if (state.selectedSet.size > 0) {
-            ids = Array.from(state.selectedSet);
-        } else {
-            $btnDownload.disabled = true;
-            try {
-                ids = await fetchLikedIds();
-            } catch (e) {
-                console.error('fetchLikedIds', e);
-                showToast('Failed to load liked photos');
-                $btnDownload.disabled = false;
-                return;
-            }
-            $btnDownload.disabled = false;
-            if (ids.length === 0) {
-                showToast('No liked photos found');
-                return;
-            }
-        }
-
-        // Try File System Access API first (works on localhost / HTTPS)
+        // File System Access API path (localhost / HTTPS only)
+        // showDirectoryPicker MUST be called before any await to preserve user gesture
         if (window.showDirectoryPicker) {
             let dirHandle;
             try {
@@ -1093,15 +1114,44 @@
             } catch (e) {
                 if (e.name === 'AbortError') return;
                 console.error('showDirectoryPicker', e);
-                // Fall through to anchor-based download
             }
             if (dirHandle) {
+                // Resolve IDs (may need API call for liked photos)
+                let ids;
+                if (state.selectedSet.size > 0) {
+                    ids = Array.from(state.selectedSet);
+                } else {
+                    $btnDownload.disabled = true;
+                    try { ids = await fetchLikedIds(); } catch (e) {
+                        console.error('fetchLikedIds', e);
+                        showToast('Failed to load liked photos');
+                        $btnDownload.disabled = false;
+                        return;
+                    }
+                    $btnDownload.disabled = false;
+                    if (ids.length === 0) { showToast('No liked photos found'); return; }
+                }
                 await downloadBulkWithFSAccess(dirHandle, ids);
                 return;
             }
         }
 
-        // Fallback: <a download> tags with progress (works over HTTP)
+        // Fallback: <a download> tags (works over HTTP, no secure context needed)
+        // Resolve IDs first (no showDirectoryPicker to worry about)
+        let ids;
+        if (state.selectedSet.size > 0) {
+            ids = Array.from(state.selectedSet);
+        } else {
+            $btnDownload.disabled = true;
+            try { ids = await fetchLikedIds(); } catch (e) {
+                console.error('fetchLikedIds', e);
+                showToast('Failed to load liked photos');
+                $btnDownload.disabled = false;
+                return;
+            }
+            $btnDownload.disabled = false;
+            if (ids.length === 0) { showToast('No liked photos found'); return; }
+        }
         await downloadBulkWithAnchors(ids);
     });
 

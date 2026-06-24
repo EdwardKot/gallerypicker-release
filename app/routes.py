@@ -21,6 +21,7 @@ async def _background_rescan():
     async with _scan_lock:
         try:
             db = await aiosqlite.connect(DATABASE_PATH)
+            db.row_factory = aiosqlite.Row
             try:
                 await db.execute("PRAGMA journal_mode=WAL")
                 await scan_photos(db=db)
