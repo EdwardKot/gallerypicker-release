@@ -333,6 +333,7 @@
                 state.selectionAnchorId = photoId;
             }
         }
+        updateDownloadButton();
     }
 
     function navigateGrid(direction) {
@@ -826,9 +827,13 @@
             $btnDownload.textContent = `⬇ Download Selected (${state.selectedSet.size})`;
             $btnDownload.title = `Download selected photos (${state.selectedSet.size})`;
             if ($btnClearSelection) $btnClearSelection.style.display = '';
+        } else if (state.focusedPhotoId) {
+            $btnDownload.textContent = '⬇ Download This';
+            $btnDownload.title = 'Download focused photo';
+            if ($btnClearSelection) $btnClearSelection.style.display = 'none';
         } else {
             $btnDownload.textContent = '⬇ Download Liked';
-            $btnDownload.title = 'Download liked photos';
+            $btnDownload.title = 'Download all liked photos';
             if ($btnClearSelection) $btnClearSelection.style.display = 'none';
         }
     }
@@ -1193,14 +1198,17 @@
     $btnDownload.addEventListener('click', async () => {
         let ids;
         if (state.selectedSet.size > 0) {
-            // 已选中照片：ID 已在内存中，同步可用
+            // Selected photos (ctrl/shift-click): download exactly those
             ids = Array.from(state.selectedSet);
+        } else if (state.focusedPhotoId) {
+            // Single focused photo (plain click): treat as ad-hoc download
+            ids = [state.focusedPhotoId];
         } else {
-            // liked 照片：使用预缓存（同步，不丢失用户手势）
+            // No selection and no focus → fall back to all liked photos
             if (state.likedIdsCache && state.likedIdsCache.length > 0) {
                 ids = state.likedIdsCache;
             } else {
-                showToast('No liked photos found');
+                showToast('No photos selected or liked');
                 return;
             }
         }
