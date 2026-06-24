@@ -1,34 +1,15 @@
 import os
 import asyncio
 import mimetypes
-import aiosqlite
 from datetime import datetime, timezone
-from fastapi import APIRouter, Query, HTTPException, BackgroundTasks
+from fastapi import APIRouter, Query, HTTPException
 from fastapi.responses import FileResponse, JSONResponse
 from app.database import get_db
 from app.scanner import scan_photos
 from app.thumbnails import generate_thumbnail, get_cache_stats, clear_cache
-from app.config import PHOTO_ROOT, DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE, DATABASE_PATH
+from app.config import PHOTO_ROOT, DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE
 
 router = APIRouter()
-
-_scan_lock = asyncio.Lock()
-
-async def _background_rescan():
-    """Run scan_photos with a separate DB connection to avoid blocking viewer API."""
-    if _scan_lock.locked():
-        return  # another scan is already in progress
-    async with _scan_lock:
-        try:
-            db = await aiosqlite.connect(DATABASE_PATH)
-            db.row_factory = aiosqlite.Row
-            try:
-                await db.execute("PRAGMA journal_mode=WAL")
-                await scan_photos(db=db)
-            finally:
-                await db.close()
-        except Exception as e:
-            print(f"Background rescan error: {e}")
 
 
 def _build_filter_sort_sql(filter_str: str, sort_str: str):
@@ -54,7 +35,6 @@ def _build_filter_sort_sql(filter_str: str, sort_str: str):
 
 @router.get("/api/photos")
 async def list_photos(
-    background_tasks: BackgroundTasks,
     filter: str = Query("all", pattern="^(all|liked|unliked)$"),
     sort: str = Query("newest", pattern="^(newest|oldest|name_asc|name_desc)$"),
     page: int = Query(1, ge=1),
@@ -91,9 +71,6 @@ async def list_photos(
             "liked": bool(row[4]),
             "filename": os.path.basename(row[1])
         })
-
-    # Auto-rescan in background so new photos appear without manual rescan
-    background_tasks.add_task(_background_rescan)
 
     return JSONResponse(
         content={

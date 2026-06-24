@@ -257,7 +257,41 @@
         syncDateCheckboxes();
     }
 
-    // ── Lazy loading with IntersectionObserver ───────────────
+    // ── Lazy loading with IntersectionObserver + concurrency throttle ──
+
+    // Max simultaneous thumbnail fetches. Android Pillow generation is
+    // CPU-bound and single-threaded (GIL), so > 4 concurrent requests
+    // just pile up in the queue without helping throughput.
+    const THUMB_CONCURRENCY = 4;
+    let thumbActive = 0;            // currently in-flight requests
+    const thumbQueue = [];          // pending { img, src } items
+
+    function flushThumbQueue() {
+        while (thumbActive < THUMB_CONCURRENCY && thumbQueue.length > 0) {
+            const { img, card, src } = thumbQueue.shift();
+            // Card may have scrolled away before its turn; skip if unobserved
+            if (!img || !card.isConnected) {
+                flushThumbQueue();
+                return;
+            }
+            thumbActive++;
+            img.onload = () => {
+                img.style.display = '';
+                const ph = card.querySelector('.thumb-placeholder');
+                if (ph) ph.remove();
+                thumbActive--;
+                flushThumbQueue();
+            };
+            img.onerror = () => {
+                const ph = card.querySelector('.thumb-placeholder');
+                if (ph) ph.textContent = '⚠';
+                console.error('Thumbnail load failed:', src);
+                thumbActive--;
+                flushThumbQueue();
+            };
+            img.src = src;
+        }
+    }
 
     let observer = null;
 
@@ -270,24 +304,16 @@
                         const card = entry.target;
                         const img = card.querySelector('img');
                         if (img && img.dataset.src) {
-                            const targetSrc = img.dataset.src;
+                            const src = img.dataset.src;
                             delete img.dataset.src;
-                            img.onload = () => {
-                                img.style.display = '';
-                                const ph = card.querySelector('.thumb-placeholder');
-                                if (ph) ph.remove();
-                            };
-                            img.onerror = () => {
-                                const ph = card.querySelector('.thumb-placeholder');
-                                if (ph) ph.textContent = '⚠';
-                                console.error('Thumbnail load failed:', targetSrc);
-                            };
-                            img.src = targetSrc;
+                            thumbQueue.push({ img, card, src });
                         }
                         observer.unobserve(card);
                     });
+                    // Flush after processing the whole batch
+                    flushThumbQueue();
                 },
-                { rootMargin: '200px' }
+                { rootMargin: '100px' }   // narrowed from 200px to reduce burst size
             );
         }
         // Only observe cards that still have data-src
