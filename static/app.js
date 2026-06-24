@@ -932,16 +932,18 @@
         });
     }
 
+    function clearSelection() {
+        state.selectedSet.clear();
+        state.lastClickedId = null;
+        state.selectionAnchorId = null;
+        $grid.querySelectorAll('.thumb-card.is-selected').forEach(c => c.classList.remove('is-selected'));
+        syncDateCheckboxes();
+        updateDownloadButton();
+    }
+
     if ($btnClearSelection) {
         $btnClearSelection.addEventListener('click', () => {
-            state.selectedSet.clear();
-            state.lastClickedId = null;
-            state.selectionAnchorId = null;
-            $grid.querySelectorAll('.thumb-card.is-selected').forEach(c => {
-                c.classList.remove('is-selected');
-            });
-            syncDateCheckboxes();
-            updateDownloadButton();
+            clearSelection();
         });
     }
 
@@ -1105,10 +1107,13 @@
 
         if (abort.signal.aborted) {
             showToast(`Download cancelled (${completed - failed}/${ids.length} saved)`);
+            // Selection kept intentionally so user can retry
         } else if (failed > 0) {
             showToast(`Downloaded ${completed - failed}/${ids.length} (${failed} failed)`, 4000);
+            clearSelection();
         } else {
             showToast(`Downloaded ${ids.length} photos ✓`);
+            clearSelection();
         }
     }
 
@@ -1168,10 +1173,13 @@
 
         if (abort.signal.aborted) {
             showToast(`Download cancelled (${completed - failed}/${ids.length} saved)`);
+            // Selection kept intentionally so user can retry
         } else if (failed > 0) {
             showToast(`Downloaded ${completed - failed}/${ids.length} (${failed} failed)`, 4000);
+            clearSelection();
         } else {
             showToast(`Downloaded ${ids.length} photos ✓`);
+            clearSelection();
         }
     }
 
