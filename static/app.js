@@ -594,6 +594,21 @@
             setViewerLikedUI(state.likedSet.has(prevId));
             extendViewerNavFromGrid();
             showViewerPhoto(prevId);
+        } else {
+            // Buffer empty – ask the API for the previous ID
+            const currentId = state.viewerPhotoId;
+            apiJson(`/api/photo/${currentId}/prev?filter=${state.currentFilter}&sort=${state.currentSort}`)
+                .then(data => {
+                    if (state.viewerPhotoId !== currentId) return;
+                    const prevId = data.photo_id;
+                    state.viewerNextIds.unshift(currentId);
+                    state.viewerPhotoId = prevId;
+                    if (state.viewerIndex > 0) state.viewerIndex--;
+                    $viewerPosition.textContent = `${state.viewerIndex + 1} / ${state.totalPhotos}`;
+                    setViewerLikedUI(state.likedSet.has(prevId));
+                    showViewerPhoto(prevId);
+                })
+                .catch(() => { /* already at first photo */ });
         }
     }
 
@@ -607,6 +622,21 @@
             setViewerLikedUI(state.likedSet.has(nextId));
             extendViewerNavFromGrid();
             showViewerPhoto(nextId);
+        } else {
+            // Buffer empty – ask the API for the next ID
+            const currentId = state.viewerPhotoId;
+            apiJson(`/api/photo/${currentId}/next?filter=${state.currentFilter}&sort=${state.currentSort}`)
+                .then(data => {
+                    if (state.viewerPhotoId !== currentId) return;
+                    const nextId = data.photo_id;
+                    state.viewerPrevIds.unshift(currentId);
+                    state.viewerPhotoId = nextId;
+                    if (state.viewerIndex < state.totalPhotos - 1) state.viewerIndex++;
+                    $viewerPosition.textContent = `${state.viewerIndex + 1} / ${state.totalPhotos}`;
+                    setViewerLikedUI(state.likedSet.has(nextId));
+                    showViewerPhoto(nextId);
+                })
+                .catch(() => { /* already at last photo */ });
         }
     }
 
@@ -860,24 +890,20 @@
 
     $viewerClose.addEventListener('click', closeViewer);
 
-    // Viewer top/bottom bar auto-hide
-    let viewerBarTimer = null;
+    // Viewer top/bottom bar: always visible, no auto-hide
     const $viewerTopBar = $viewer.querySelector('.viewer-top-bar');
     const $viewerBottomBar = $viewer.querySelector('.viewer-bottom-bar');
     const $viewerCloseBtn = $viewer.querySelector('.viewer-close-btn');
 
     function showViewerBars() {
+        // bars are always visible; kept for compatibility with event listeners
         $viewerTopBar.classList.remove('hidden');
         $viewerBottomBar.classList.remove('hidden');
         $viewerCloseBtn.classList.remove('hidden');
-        clearTimeout(viewerBarTimer);
-        viewerBarTimer = setTimeout(hideViewerBars, 3000);
     }
 
     function hideViewerBars() {
-        $viewerTopBar.classList.add('hidden');
-        $viewerBottomBar.classList.add('hidden');
-        $viewerCloseBtn.classList.add('hidden');
+        // intentionally disabled – bars stay visible always
     }
 
     $viewer.addEventListener('mousemove', showViewerBars);
@@ -960,8 +986,35 @@
         setTimeout(() => a.remove(), 100);
     }
 
+    // Single-file download: fetch as blob then create object URL.
+    // This works on Android Chrome (no popup blocker issues) and ensures
+    // the file saves rather than opening inline.
     function downloadSingleFile(id) {
-        downloadWithAnchor(id);
+        showToast('Downloading…');
+        fetch(`/api/download/${id}`)
+            .then(resp => {
+                if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+                const disp = resp.headers.get('Content-Disposition') || '';
+                const match = disp.match(/filename[^;=\n]*=["']?([^"';\n]+)["']?/i);
+                const xfn = resp.headers.get('X-Filename');
+                const filename = match ? match[1].trim() : (xfn || `photo_${id}`);
+                return resp.blob().then(blob => ({ blob, filename }));
+            })
+            .then(({ blob, filename }) => {
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = filename;
+                a.style.display = 'none';
+                document.body.appendChild(a);
+                a.click();
+                setTimeout(() => { URL.revokeObjectURL(url); a.remove(); }, 1000);
+                showToast(`Downloaded: ${filename}`);
+            })
+            .catch(e => {
+                console.error('downloadSingleFile', e);
+                showToast('Download failed');
+            });
     }
 
     function getUniqueFilename(name, existingNames) {
@@ -1053,58 +1106,67 @@
         }
     }
 
-    // 同步锚点下载：不经过 fetch，直接用 <a href> 让浏览器处理请求
-    // 第一个 a.click() 在用户手势内执行，触发 Chrome 多文件下载权限
-    // 后续通过 setTimeout 间隔触发，避免浏览器拦截并发下载
-    function downloadBulkSync(ids) {
+    // Bulk download for Android/HTTP fallback: fetch each file as blob and
+    // trigger download via object URL. Sequential to avoid popup blocking.
+    async function downloadBulkSync(ids) {
         if (ids.length === 0) {
             showToast('No photos to download');
             return;
         }
 
-        const abort = { aborted: false };
-        downloadAbort = { abort: () => { abort.aborted = true; } };
+        const abort = new AbortController();
+        downloadAbort = abort;
 
         showDownloadProgress(ids.length);
         $btnDownload.disabled = true;
 
-        let triggered = 0;
+        let completed = 0;
+        let failed = 0;
 
-        function triggerNext() {
-            if (abort.aborted) {
-                hideDownloadProgress();
-                $btnDownload.disabled = false;
-                downloadAbort = null;
-                showToast(`Download cancelled (${triggered} / ${ids.length} saved)`);
-                return;
+        for (const id of ids) {
+            if (abort.signal.aborted) break;
+            try {
+                const resp = await fetch(`/api/download/${id}`, { signal: abort.signal });
+                if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+                const disp = resp.headers.get('Content-Disposition') || '';
+                const match = disp.match(/filename[^;=\n]*=["']?([^"';\n]+)["']?/i);
+                const xfn = resp.headers.get('X-Filename');
+                const filename = match ? match[1].trim() : (xfn || `photo_${id}`);
+                const blob = await resp.blob();
+
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = filename;
+                a.style.display = 'none';
+                document.body.appendChild(a);
+                a.click();
+                setTimeout(() => { URL.revokeObjectURL(url); a.remove(); }, 1000);
+
+                completed++;
+                updateDownloadProgress(completed, ids.length, filename);
+                // Short pause so browser can process each download
+                await new Promise(r => setTimeout(r, 300));
+            } catch (e) {
+                if (e.name === 'AbortError') break;
+                console.error(`download photo ${id}`, e);
+                failed++;
+                completed++;
+                updateDownloadProgress(completed, ids.length, '(skipped)');
             }
-
-            if (triggered >= ids.length) {
-                hideDownloadProgress();
-                $btnDownload.disabled = false;
-                downloadAbort = null;
-                showToast(`Downloaded ${ids.length} photos ✓`);
-                return;
-            }
-
-            const id = ids[triggered];
-            const a = document.createElement('a');
-            a.href = `/api/download/${id}`;
-            a.download = '';
-            a.style.display = 'none';
-            document.body.appendChild(a);
-            a.click();
-            a.remove();
-
-            triggered++;
-            updateDownloadProgress(triggered, ids.length, '');
-
-            // 间隔 500ms 触发下一个，给浏览器处理时间
-            setTimeout(triggerNext, 500);
         }
 
-        // 首次调用同步执行，位于用户手势上下文内
-        triggerNext();
+        hideDownloadProgress();
+        $btnDownload.disabled = false;
+        downloadAbort = null;
+
+        if (abort.signal.aborted) {
+            showToast(`Download cancelled (${completed - failed}/${ids.length} saved)`);
+        } else if (failed > 0) {
+            showToast(`Downloaded ${completed - failed}/${ids.length} (${failed} failed)`, 4000);
+        } else {
+            showToast(`Downloaded ${ids.length} photos ✓`);
+        }
     }
 
     if ($downloadCancel) {

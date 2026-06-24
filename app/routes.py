@@ -341,10 +341,16 @@ async def download_photo(photo_id: str):
     if not media_type:
         media_type = "application/octet-stream"
 
+    # Explicitly set Content-Disposition: attachment so Android Chrome triggers a save
+    # rather than opening the file inline. Also expose filename via X-Filename header.
+    headers = {
+        "X-Filename": filename,
+    }
     return FileResponse(
         abs_path,
         media_type=media_type,
-        filename=filename
+        filename=filename,
+        headers=headers,
     )
 
 
