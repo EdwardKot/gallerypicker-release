@@ -953,26 +953,9 @@
         $downloadOverlay.style.display = 'none';
     }
 
-    async function downloadBulkPhotos(ids) {
+    async function downloadBulkPhotos(dirHandle, ids) {
         if (ids.length === 0) {
             showToast('No photos to download');
-            return;
-        }
-
-        if (!fsAccessSupported) {
-            // Fallback: use iframes for each file
-            showToast(`Downloading ${ids.length} photos…`);
-            ids.forEach(downloadWithIframe);
-            return;
-        }
-
-        let dirHandle;
-        try {
-            dirHandle = await window.showDirectoryPicker({ mode: 'readwrite' });
-        } catch (e) {
-            if (e.name === 'AbortError') return; // user cancelled folder picker
-            console.error('showDirectoryPicker', e);
-            showToast('Folder selection failed');
             return;
         }
 
@@ -1040,27 +1023,60 @@
         });
     }
 
+    async function fetchLikedIds() {
+        const data = await apiJson('/api/photos?filter=liked&page_size=10000');
+        return (data.photos || []).map(p => p.photo_id);
+    }
+
     $btnDownload.addEventListener('click', async () => {
+        // Check File System Access support first
+        if (!window.showDirectoryPicker) {
+            // Fallback: iframe downloads
+            let ids;
+            if (state.selectedSet.size > 0) {
+                ids = Array.from(state.selectedSet);
+            } else {
+                try { ids = await fetchLikedIds(); } catch (_) { showToast('Download failed'); return; }
+                if (!ids.length) { showToast('No liked photos found'); return; }
+            }
+            showToast(`Downloading ${ids.length} photos…`);
+            ids.forEach(downloadWithIframe);
+            return;
+        }
+
+        // Call showDirectoryPicker synchronously within the click gesture
+        let dirHandle;
+        try {
+            dirHandle = await window.showDirectoryPicker({ mode: 'readwrite' });
+        } catch (e) {
+            if (e.name === 'AbortError') return; // user cancelled
+            console.error('showDirectoryPicker', e);
+            showToast('Folder selection failed');
+            return;
+        }
+
+        // Resolve photo IDs (may need an API call for liked photos)
+        let ids;
         if (state.selectedSet.size > 0) {
-            const ids = Array.from(state.selectedSet);
-            await downloadBulkPhotos(ids);
+            ids = Array.from(state.selectedSet);
         } else {
             $btnDownload.disabled = true;
             try {
-                const data = await apiJson('/api/photos?filter=liked&page_size=10000');
-                const ids = (data.photos || []).map(p => p.photo_id);
-                if (ids.length === 0) {
-                    showToast('No liked photos found');
-                    return;
-                }
-                await downloadBulkPhotos(ids);
+                ids = await fetchLikedIds();
             } catch (e) {
-                console.error('downloadLiked', e);
-                showToast('Download failed');
-            } finally {
+                console.error('fetchLikedIds', e);
+                showToast('Failed to load liked photos');
                 $btnDownload.disabled = false;
+                return;
+            }
+            if (ids.length === 0) {
+                showToast('No liked photos found');
+                $btnDownload.disabled = false;
+                return;
             }
         }
+
+        await downloadBulkPhotos(dirHandle, ids);
     });
 
     // ── Init ─────────────────────────────────────────────────
