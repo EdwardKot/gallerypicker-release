@@ -29,19 +29,23 @@ def _extract_exif(abs_path: str) -> dict:
             if not exif:
                 return result
 
+            # 0x8769 is ExifOffset (EXIF SubIFD)
+            exif_sub = exif.get_ifd(0x8769)
+
             # Standard tag: 35mm equivalent focal length
-            fl = exif.get(_TAG_FOCAL_LENGTH_35MM)
-            if fl is not None:
-                try:
-                    result["focal_length_35mm"] = int(fl)
-                except (TypeError, ValueError):
-                    pass
+            if exif_sub:
+                fl = exif_sub.get(_TAG_FOCAL_LENGTH_35MM)
+                if fl is not None:
+                    try:
+                        result["focal_length_35mm"] = int(fl)
+                    except (TypeError, ValueError):
+                        pass
 
             # Xiaomi private tags — only attempt for Xiaomi bodies
             make = (exif.get(_TAG_MAKE) or "").strip()
-            if make.lower() == "xiaomi":
+            if make.lower() == "xiaomi" and exif_sub:
                 try:
-                    maker_ifd = exif.get_ifd(_TAG_MAKER_NOTE)
+                    maker_ifd = exif_sub.get_ifd(_TAG_MAKER_NOTE)
                     if maker_ifd:
                         portrait = maker_ifd.get(_TAG_XIAOMI_PORTRAIT)
                         scene    = maker_ifd.get(_TAG_XIAOMI_SCENE)
@@ -83,7 +87,7 @@ async def scan_photos(photo_root: str = None, db=None) -> dict:
             await db.execute("CREATE TABLE IF NOT EXISTS system_meta (key TEXT PRIMARY KEY, value TEXT)")
             await db.commit()
         
-        cursor = await db.execute("SELECT value FROM system_meta WHERE key = 'exif_backfill_done'")
+        cursor = await db.execute("SELECT value FROM system_meta WHERE key = 'exif_backfill_done_v2'")
         row = await cursor.fetchone()
         backfill_done = row and row[0] == '1'
         
@@ -116,7 +120,7 @@ async def scan_photos(photo_root: str = None, db=None) -> dict:
                 )
                 await db.commit()
             
-            await db.execute("INSERT OR REPLACE INTO system_meta (key, value) VALUES ('exif_backfill_done', '1')")
+            await db.execute("INSERT OR REPLACE INTO system_meta (key, value) VALUES ('exif_backfill_done_v2', '1')")
             await db.commit()
             print(f"One-time EXIF backfill completed for {len(to_update)} photos.")
     except Exception as e:

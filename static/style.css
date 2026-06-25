@@ -48,6 +48,7 @@ header {
 .header-center {
     display: flex;
     align-items: center;
+    gap: 12px;
 }
 
 .header-right {
@@ -755,42 +756,65 @@ header {
 }
 
 .settings-select {
+    appearance: none;
+    -webkit-appearance: none;
+    -moz-appearance: none;
     width: 100%;
-    padding: 8px 12px;
+    padding: 8px 32px 8px 12px;
     border: 1px solid var(--border);
-    border-radius: 4px;
-    background: var(--bg-primary);
+    border-radius: 8px;
+    background: var(--bg-primary) url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23a0a0a0' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'><polyline points='6 9 12 15 18 9'></polyline></svg>") no-repeat right 12px center;
+    background-size: 14px;
     color: var(--text-primary);
     font-size: 13px;
     cursor: pointer;
     outline: none;
+    transition: all 0.2s ease-in-out;
+}
+
+.settings-select:hover {
+    background-color: var(--bg-hover);
+    border-color: #555;
 }
 
 .settings-select:focus {
     border-color: var(--accent);
+    box-shadow: 0 0 0 2px rgba(74, 158, 255, 0.25);
 }
 
 /* EXIF filter dropdowns */
 .exif-filters {
     display: flex;
-    gap: 6px;
-    margin-top: 6px;
-    flex-wrap: wrap;
-    justify-content: center;
+    gap: 8px;
+    align-items: center;
 }
 
 .exif-filter-select {
-    background: var(--bg-secondary);
+    appearance: none;
+    -webkit-appearance: none;
+    -moz-appearance: none;
+    background: var(--bg-secondary) url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23a0a0a0' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'><polyline points='6 9 12 15 18 9'></polyline></svg>") no-repeat right 10px center;
+    background-size: 14px;
     border: 1px solid var(--border);
-    border-radius: 6px;
+    border-radius: 8px;
     color: var(--text-primary);
     font-size: 12px;
-    padding: 4px 8px;
+    padding: 6px 30px 6px 12px;
     cursor: pointer;
     outline: none;
-    max-width: 160px;
+    min-width: 120px;
+    max-width: 180px;
+    transition: all 0.2s ease-in-out;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+}
+
+.exif-filter-select:hover {
+    background-color: var(--bg-hover);
+    border-color: #555;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.3);
 }
 
 .exif-filter-select:focus {
     border-color: var(--accent);
+    box-shadow: 0 0 0 2px rgba(74, 158, 255, 0.25);
 }

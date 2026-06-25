@@ -1050,7 +1050,7 @@
         showToast('Rescanning…');
         try {
             const data = await apiJson('/api/rescan', { method: 'POST' });
-            const count = data.total ?? data.count ?? '?';
+            const count = data.scanned ?? data.total_in_db ?? '?';
             showToast(`Rescan complete: ${count} photos`);
             await fetchCounts();
             await fetchPhotos();
