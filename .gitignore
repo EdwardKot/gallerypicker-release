@@ -6,3 +6,4 @@ cache/
 data/
 *.db
 .DS_Store
+.agents/
