@@ -186,6 +186,9 @@ header {
     transition: border-color 0.15s, transform 0.1s;
     aspect-ratio: 1 / 1;
     -webkit-tap-highlight-color: transparent;
+    -webkit-touch-callout: none;
+    -webkit-user-select: none;
+    user-select: none;
 }
 
 .thumb-card:hover {
@@ -234,6 +237,8 @@ header {
 .thumb-card.is-selected {
     border-color: var(--accent);
     box-shadow: 0 0 0 2px var(--accent);
+    transform: scale(0.96);
+    transition: transform 0.15s ease-out, border-color 0.15s;
 }
 
 .thumb-card.is-focused {
@@ -817,4 +822,219 @@ header {
 .exif-filter-select:focus {
     border-color: var(--accent);
     box-shadow: 0 0 0 2px rgba(74, 158, 255, 0.25);
+}
+
+/* ── Touch / iPadOS specific optimizations ────────────────── */
+
+/* Floating Like Pill styling */
+.viewer-touch-pill {
+    position: absolute;
+    bottom: 30px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 1002;
+    display: none; /* Hidden by default, displayed only in .is-touch */
+}
+
+body.is-touch .viewer-touch-pill {
+    display: block;
+}
+
+.viewer-touch-like-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 56px;
+    height: 56px;
+    border-radius: 50%;
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    background: rgba(13, 13, 13, 0.5);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+    cursor: pointer;
+    transition: transform 0.15s, background-color 0.15s;
+    outline: none;
+    -webkit-tap-highlight-color: transparent;
+}
+
+.viewer-touch-like-btn:active {
+    transform: scale(0.9);
+    background-color: rgba(13, 13, 13, 0.7);
+}
+
+.floating-heart-icon {
+    width: 28px;
+    height: 28px;
+    fill: none;
+    stroke: #ccc;
+    stroke-width: 2.5;
+    transition: stroke 0.2s, fill 0.2s;
+}
+
+.floating-heart-icon.is-liked {
+    fill: var(--liked-color);
+    stroke: var(--liked-color);
+}
+
+@keyframes heartPulse {
+    0% { transform: scale(1); }
+    50% { transform: scale(1.3); }
+    100% { transform: scale(1.1); }
+}
+
+.floating-heart-icon.heart-pulse {
+    animation: heartPulse 0.3s ease-out forwards;
+}
+
+/* Hide standard viewer liked indicator when touch pill is active to avoid redundancy */
+body.is-touch #viewer-liked {
+    display: none;
+}
+
+/* Safe Area Spacings (iOS / iPadOS) */
+body.is-touch .viewer-top-bar {
+    padding-top: calc(env(safe-area-inset-top, 12px) + 8px);
+}
+
+body.is-touch .viewer-bottom-bar {
+    padding-bottom: calc(env(safe-area-inset-bottom, 12px) + 8px);
+}
+
+/* ── Mobile Bottom Sheet Drawer ────────────────────────── */
+
+.mobile-only {
+    display: none !important;
+}
+
+@media (max-width: 768px) {
+    .mobile-only {
+        display: flex !important;
+    }
+    
+    header .header-right #btn-settings,
+    header .header-right #btn-rescan,
+    header .header-right .thumb-size-control,
+    header .header-center .exif-filters {
+        display: none !important;
+    }
+
+    header {
+        padding: 8px 12px;
+    }
+
+    .filter-btn {
+        min-height: 44px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+    }
+}
+
+.mobile-drawer-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 2000;
+    background: rgba(0, 0, 0, 0.6);
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+}
+
+.mobile-drawer {
+    background: var(--bg-secondary);
+    border-top: 1px solid var(--border);
+    border-radius: 16px 16px 0 0;
+    width: 100%;
+    max-width: 500px;
+    box-shadow: 0 -8px 32px rgba(0, 0, 0, 0.4);
+    animation: drawerSlideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes drawerSlideUp {
+    from { transform: translateY(100%); }
+    to { transform: translateY(0); }
+}
+
+.mobile-drawer-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 16px 20px;
+    border-bottom: 1px solid var(--border);
+}
+
+.mobile-drawer-header h3 {
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.mobile-drawer-close-btn {
+    width: 32px;
+    height: 32px;
+    border: none;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.08);
+    color: var(--text-secondary);
+    font-size: 14px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.mobile-drawer-body {
+    padding: 16px 20px 32px 20px;
+}
+
+.drawer-section {
+    margin-bottom: 20px;
+}
+
+.drawer-section:last-child {
+    margin-bottom: 0;
+}
+
+.drawer-section h4 {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: var(--text-secondary);
+    margin-bottom: 8px;
+}
+
+.drawer-content-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+    min-height: 44px;
+}
+
+.drawer-content-row .exif-filter-select {
+    flex: 1;
+    min-width: 140px;
+    max-width: none;
+    height: 44px;
+}
+
+.drawer-content-row .tool-btn {
+    flex: 1;
+    height: 44px;
+    justify-content: center;
+    align-items: center;
+    display: flex;
+}
+
+.drawer-content-row .thumb-size-control {
+    width: 100%;
+    justify-content: space-between;
+    padding: 6px 0;
+}
+
+.drawer-content-row .thumb-size-control input[type="range"] {
+    flex: 1;
+    margin-left: 12px;
+    height: 28px;
 }

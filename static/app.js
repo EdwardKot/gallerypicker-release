@@ -32,6 +32,14 @@
         focalLength: null,      // active focal length filter (integer or null)
         portraitMode: null,     // active xiaomi portrait filter (integer or null)
         unauthorized: false,
+        isTouch: (function () {
+            if (typeof window === 'undefined') return false;
+            const ua = window.navigator.userAgent;
+            const isMobileUA = /iPad|iPhone|iPod|Android/.test(ua);
+            const isMacIntel = window.navigator.platform === 'MacIntel';
+            const hasTouchPoints = window.navigator.maxTouchPoints && window.navigator.maxTouchPoints > 1;
+            return isMobileUA || (isMacIntel && !!hasTouchPoints);
+        })(),
     };
 
     // ── DOM refs ─────────────────────────────────────────────
@@ -54,6 +62,9 @@
     const $viewerLoadOriginal = document.getElementById('viewer-load-original');
     const $viewerDownload = document.getElementById('viewer-download');
     const $btnSettings = document.getElementById('btn-settings');
+    const $btnMore = document.getElementById('btn-more');
+    const $drawerOverlay = document.getElementById('mobile-drawer-overlay');
+    const $drawerClose = document.getElementById('mobile-drawer-close');
     const $settingsOverlay = document.getElementById('settings-overlay');
     const $settingsClose = document.getElementById('settings-close');
     const $settingsCacheCount = document.getElementById('settings-cache-count');
@@ -509,9 +520,23 @@
 
     // ── Viewer ───────────────────────────────────────────────
 
-    function setViewerLikedUI(liked) {
+    function setViewerLikedUI(liked, animate = false) {
         $viewerLiked.textContent = liked ? '♥ Liked' : '♡ Like';
-        $viewerLiked.className = 'viewer-liked-indicator ' + (liked ? 'is-liked' : '');
+        $viewerLiked.className = 'viewer-liked-indicator ' + (liked ? 'is-liked' : '') + (animate && liked ? ' heart-pulse' : '');
+
+        const $floatingPill = document.getElementById('viewer-touch-pill');
+        if ($floatingPill) {
+            $floatingPill.classList.toggle('is-liked', liked);
+            const $floatingHeart = $floatingPill.querySelector('.floating-heart-icon');
+            if ($floatingHeart) {
+                $floatingHeart.classList.toggle('is-liked', liked);
+                if (animate && liked) {
+                    $floatingHeart.classList.remove('heart-pulse');
+                    void $floatingHeart.offsetWidth; // trigger reflow
+                    $floatingHeart.classList.add('heart-pulse');
+                }
+            }
+        }
     }
 
     function openViewer(photoId) {
@@ -752,7 +777,7 @@
 
         state.likedSet.add(photoId);
         if (state.likedIdsCache !== null) state.likedIdsCache.push(photoId);
-        setViewerLikedUI(true);
+        setViewerLikedUI(true, true);
 
         // Sync grid card state
         const card = $grid.querySelector(`.thumb-card[data-photo-id="${photoId}"]`);
@@ -793,6 +818,21 @@
             viewerLike();
         }
     });
+
+    const $viewerTouchLikeBtn = document.getElementById('viewer-touch-like-btn');
+    if ($viewerTouchLikeBtn) {
+        $viewerTouchLikeBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            if (!state.viewerPhotoId) return;
+            const photoId = state.viewerPhotoId;
+            const liked = state.likedSet.has(photoId);
+            if (liked) {
+                viewerUnlike();
+            } else {
+                viewerLike();
+            }
+        });
+    }
 
     $viewerBtnPrev.addEventListener('click', viewerPrev);
     $viewerBtnNext.addEventListener('click', viewerNext);
@@ -953,6 +993,17 @@
         const photoId = card.dataset.photoId;
         if (!photoId) return;
 
+        if (state.isTouch) {
+            if (state.selectedSet.size > 0) {
+                // Touch multiselect UX: standard tap toggles selection directly
+                handleSelectionClick(card, photoId, false, false);
+            } else {
+                // Standard Touch tap: open viewer immediately
+                openViewer(photoId);
+            }
+            return;
+        }
+
         if (e.shiftKey || e.ctrlKey || e.metaKey) {
             e.preventDefault();
             e.stopPropagation();
@@ -965,12 +1016,134 @@
 
     // Double click on a thumbnail opens the viewer
     $grid.addEventListener('dblclick', (e) => {
+        if (state.isTouch) return; // Prevent double tap issues on mobile
         const card = e.target.closest('.thumb-card');
         if (!card) return;
         const photoId = card.dataset.photoId;
         if (!photoId) return;
         openViewer(photoId);
     });
+
+    // ── Touch selection gestures (iPadOS / Touch screen) ──────
+    let longPressTimer = 0;
+    let isTouchSelecting = false;
+    let dragSelectionStartIndex = null;
+    let touchStartIndex = null;
+    let touchStartPos = { x: 0, y: 0 };
+    let longPressedActive = false;
+
+    function getCardIndex(card) {
+        const cards = Array.from($grid.querySelectorAll('.thumb-card'));
+        return cards.indexOf(card);
+    }
+
+    function triggerLongPressSelection(card, index) {
+        const photoId = card.dataset.photoId;
+        if (!photoId) return;
+
+        if (state.selectedSet.has(photoId)) {
+            state.selectedSet.delete(photoId);
+            card.classList.remove('is-selected');
+        } else {
+            state.selectedSet.add(photoId);
+            card.classList.add('is-selected');
+        }
+        state.selectionAnchorId = photoId;
+
+        isTouchSelecting = true;
+        dragSelectionStartIndex = index;
+
+        if (typeof navigator !== 'undefined' && navigator.vibrate) {
+            navigator.vibrate(40);
+        }
+
+        syncDateCheckboxes();
+        updateDownloadButton();
+    }
+
+    $grid.addEventListener('touchstart', (e) => {
+        if (!state.isTouch) return;
+        const card = e.target.closest('.thumb-card');
+        if (!card) return;
+
+        const index = getCardIndex(card);
+        if (index === -1) return;
+
+        touchStartIndex = index;
+        touchStartPos = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+        longPressedActive = false;
+
+        if (longPressTimer) clearTimeout(longPressTimer);
+
+        longPressTimer = window.setTimeout(() => {
+            longPressedActive = true;
+            triggerLongPressSelection(card, index);
+        }, 380);
+    }, { passive: true });
+
+    $grid.addEventListener('touchmove', (e) => {
+        if (!state.isTouch) return;
+        if (e.touches.length !== 1) return;
+
+        const touch = e.touches[0];
+
+        if (!isTouchSelecting && touchStartIndex !== null) {
+            const dx = touch.clientX - touchStartPos.x;
+            const dy = touch.clientY - touchStartPos.y;
+            if (Math.sqrt(dx * dx + dy * dy) > 15) {
+                if (longPressTimer) {
+                    clearTimeout(longPressTimer);
+                    longPressTimer = 0;
+                }
+                touchStartIndex = null;
+            }
+            return;
+        }
+
+        if (isTouchSelecting && dragSelectionStartIndex !== null) {
+            if (e.cancelable) e.preventDefault();
+
+            const targetEl = document.elementFromPoint(touch.clientX, touch.clientY);
+            if (targetEl) {
+                const card = targetEl.closest('.thumb-card');
+                if (card) {
+                    const index = getCardIndex(card);
+                    if (index !== -1 && index !== touchStartIndex) {
+                        const cards = Array.from($grid.querySelectorAll('.thumb-card'));
+                        const start = Math.min(dragSelectionStartIndex, index);
+                        const end = Math.max(dragSelectionStartIndex, index);
+
+                        for (let i = start; i <= end; i++) {
+                            const c = cards[i];
+                            const id = c.dataset.photoId;
+                            state.selectedSet.add(id);
+                            c.classList.add('is-selected');
+                        }
+                        syncDateCheckboxes();
+                        updateDownloadButton();
+                    }
+                }
+            }
+        }
+    }, { passive: false });
+
+    $grid.addEventListener('touchend', (e) => {
+        if (!state.isTouch) return;
+
+        if (longPressTimer) {
+            clearTimeout(longPressTimer);
+            longPressTimer = 0;
+        }
+
+        if (longPressedActive || isTouchSelecting) {
+            if (e.cancelable) e.preventDefault();
+        }
+
+        isTouchSelecting = false;
+        dragSelectionStartIndex = null;
+        touchStartIndex = null;
+        longPressedActive = false;
+    }, { passive: false });
 
     $viewerClose.addEventListener('click', closeViewer);
 
@@ -1029,6 +1202,119 @@
     $viewerImgContainer.addEventListener('click', (e) => {
         if (e.target === e.currentTarget) closeViewer();
     });
+
+    // ── Viewer Touch Gestures ────────────────────────────────
+    let viewerTouchStartX = 0;
+    let viewerTouchStartY = 0;
+    let viewerTouchStartTime = 0;
+    let viewerLastTapTime = 0;
+    let viewerIsSwiping = false;
+    let viewerSwipeDirection = '';
+
+    $viewerImgContainer.addEventListener('touchstart', (e) => {
+        if (!state.isTouch) return;
+        if (e.touches.length !== 1) return;
+
+        viewerTouchStartX = e.touches[0].clientX;
+        viewerTouchStartY = e.touches[0].clientY;
+        viewerTouchStartTime = Date.now();
+        viewerIsSwiping = true;
+        viewerSwipeDirection = '';
+
+        $viewerImg.style.transition = '';
+    }, { passive: true });
+
+    $viewerImgContainer.addEventListener('touchmove', (e) => {
+        if (!state.isTouch || !viewerIsSwiping) return;
+        if (e.touches.length !== 1) return;
+
+        const touch = e.touches[0];
+        const dx = touch.clientX - viewerTouchStartX;
+        const dy = touch.clientY - viewerTouchStartY;
+
+        if (!viewerSwipeDirection) {
+            if (Math.abs(dx) > 10 || Math.abs(dy) > 10) {
+                viewerSwipeDirection = Math.abs(dx) > Math.abs(dy) ? 'horizontal' : 'vertical';
+            }
+        }
+
+        if (viewerSwipeDirection === 'vertical') {
+            if (dy > 0) {
+                if (e.cancelable) e.preventDefault();
+                const scale = Math.max(0.7, 1 - dy / 1000);
+                $viewerImg.style.transform = `translate3d(0, ${dy}px, 0) scale(${scale})`;
+                
+                $viewer.style.backgroundColor = `rgba(0, 0, 0, ${Math.max(0.15, 1 - dy / 400)})`;
+                $viewerTopBar.style.opacity = Math.max(0, 1 - dy / 150);
+                $viewerBottomBar.style.opacity = Math.max(0, 1 - dy / 150);
+                $viewerClose.style.opacity = Math.max(0, 1 - dy / 150);
+            }
+        } else if (viewerSwipeDirection === 'horizontal') {
+            if (e.cancelable) e.preventDefault();
+            $viewerImg.style.transform = `translate3d(${dx}px, 0, 0)`;
+        }
+    }, { passive: false });
+
+    $viewerImgContainer.addEventListener('touchend', (e) => {
+        if (!state.isTouch) return;
+
+        const dt = Date.now() - viewerTouchStartTime;
+        viewerIsSwiping = false;
+
+        $viewerImg.style.transition = 'transform 0.25s cubic-bezier(0.16, 1, 0.3, 1)';
+
+        const dx = e.changedTouches[0].clientX - viewerTouchStartX;
+        const dy = e.changedTouches[0].clientY - viewerTouchStartY;
+
+        const isTap = Math.sqrt(dx * dx + dy * dy) < 8 && dt < 250;
+        if (isTap) {
+            const now = Date.now();
+            if (now - viewerLastTapTime < 300) {
+                if (state.viewerPhotoId) {
+                    const liked = state.likedSet.has(state.viewerPhotoId);
+                    if (liked) {
+                        viewerUnlike();
+                    } else {
+                        viewerLike();
+                    }
+                }
+                viewerLastTapTime = 0;
+            } else {
+                viewerLastTapTime = now;
+            }
+        }
+
+        if (viewerSwipeDirection === 'vertical') {
+            if (dy > 120) {
+                closeViewer();
+                $viewerImg.style.transform = '';
+                $viewerImg.style.transition = '';
+                $viewer.style.backgroundColor = '';
+                $viewerTopBar.style.opacity = '';
+                $viewerBottomBar.style.opacity = '';
+                $viewerClose.style.opacity = '';
+            } else {
+                $viewerImg.style.transform = '';
+                $viewer.style.backgroundColor = '';
+                $viewerTopBar.style.opacity = '';
+                $viewerBottomBar.style.opacity = '';
+                $viewerClose.style.opacity = '';
+                setTimeout(() => { $viewerImg.style.transition = ''; }, 250);
+            }
+        } else if (viewerSwipeDirection === 'horizontal') {
+            if (Math.abs(dx) > 60) {
+                if (dx > 0) {
+                    viewerPrev();
+                } else {
+                    viewerNext();
+                }
+            }
+            $viewerImg.style.transform = '';
+            setTimeout(() => { $viewerImg.style.transition = ''; }, 250);
+        }
+
+        viewerSwipeDirection = '';
+    }, { passive: false });
 
     // Filter buttons
     document.querySelectorAll('.filter-btn').forEach(btn => {
@@ -1323,6 +1609,9 @@
     // ── Init ─────────────────────────────────────────────────
 
     async function initApp() {
+        if (state.isTouch) {
+            document.body.classList.add('is-touch');
+        }
         applyThumbSize();
         // Restore preview size setting
         if ($settingsPreviewSize) {
@@ -1395,6 +1684,7 @@
     // ── Settings panel ──────────────────────────────────────
 
     function openSettings() {
+        if ($drawerOverlay) $drawerOverlay.style.display = 'none';
         $settingsOverlay.style.display = '';
         refreshCacheStats();
     }
@@ -1441,4 +1731,71 @@
         localStorage.setItem('viewerPreviewSize', val.toString());
         showToast('Preview size saved');
     });
+
+    // ── Mobile Bottom Sheet Drawer ──────────────────────────
+    function relocateDOM() {
+        const isMobile = window.innerWidth <= 768;
+        const $drawerExif = document.getElementById('drawer-exif-container');
+        const $drawerSize = document.getElementById('drawer-size-container');
+        const $drawerActions = document.getElementById('drawer-actions-container');
+
+        if (isMobile) {
+            if ($drawerExif) {
+                const focalLength = document.getElementById('filter-focal-length');
+                const portrait = document.getElementById('filter-portrait');
+                if (focalLength) $drawerExif.appendChild(focalLength);
+                if (portrait) $drawerExif.appendChild(portrait);
+            }
+            if ($drawerSize) {
+                const sizeControl = document.querySelector('.thumb-size-control');
+                if (sizeControl) $drawerSize.appendChild(sizeControl);
+            }
+            if ($drawerActions) {
+                const settings = document.getElementById('btn-settings');
+                const rescan = document.getElementById('btn-rescan');
+                if (settings) $drawerActions.appendChild(settings);
+                if (rescan) $drawerActions.appendChild(rescan);
+            }
+        } else {
+            const headerCenter = document.querySelector('.exif-filters');
+            if (headerCenter) {
+                const focalLength = document.getElementById('filter-focal-length');
+                const portrait = document.getElementById('filter-portrait');
+                if (focalLength) headerCenter.appendChild(focalLength);
+                if (portrait) headerCenter.appendChild(portrait);
+            }
+            const headerRight = document.querySelector('.header-right');
+            if (headerRight) {
+                const settings = document.getElementById('btn-settings');
+                const rescan = document.getElementById('btn-rescan');
+                const clearBtn = document.getElementById('btn-clear-selection');
+                const sizeControl = document.querySelector('.thumb-size-control');
+
+                if (settings) headerRight.insertBefore(settings, clearBtn);
+                if (rescan) headerRight.insertBefore(rescan, clearBtn);
+                if (sizeControl) headerRight.appendChild(sizeControl);
+            }
+        }
+    }
+
+    if ($btnMore) {
+        $btnMore.addEventListener('click', () => {
+            if ($drawerOverlay) $drawerOverlay.style.display = 'flex';
+        });
+    }
+
+    if ($drawerClose) {
+        $drawerClose.addEventListener('click', () => {
+            if ($drawerOverlay) $drawerOverlay.style.display = 'none';
+        });
+    }
+
+    if ($drawerOverlay) {
+        $drawerOverlay.addEventListener('click', (e) => {
+            if (e.target === $drawerOverlay) $drawerOverlay.style.display = 'none';
+        });
+    }
+
+    window.addEventListener('resize', relocateDOM);
+    relocateDOM();
 })();

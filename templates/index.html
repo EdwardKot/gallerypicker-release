@@ -31,6 +31,7 @@
         <div class="header-right">
             <button id="btn-settings" class="tool-btn" title="Settings">⚙ Settings</button>
             <button id="btn-rescan" class="tool-btn" title="Rescan photo library">⟳ Rescan</button>
+            <button id="btn-more" class="tool-btn mobile-only" title="More Options">⚙ More</button>
             <button id="btn-clear-selection" class="tool-btn" style="display: none;" title="Clear current selection">✕ Clear</button>
             <button id="btn-download-liked" class="tool-btn" title="Download selected or liked photos">⬇ Download</button>
             <div class="thumb-size-control">
@@ -69,6 +70,14 @@
             </div>
         </div>
         <button id="viewer-close" class="viewer-close-btn" title="Close (Esc)">✕</button>
+        <!-- Floating Touch Heart Pill (iOS/iPadOS style) -->
+        <div id="viewer-touch-pill" class="viewer-touch-pill">
+            <button id="viewer-touch-like-btn" class="viewer-touch-like-btn" aria-label="Toggle Like">
+                <svg class="floating-heart-icon" viewBox="0 0 24 24">
+                    <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>
+                </svg>
+            </button>
+        </div>
     </div>
 
     <div id="toast" class="toast"></div>
@@ -150,6 +159,30 @@
                            color:#fff; font-size:14px; font-weight:600; cursor:pointer;">
                 进入
             </button>
+        </div>
+    </div>
+
+    <!-- Mobile More Options Bottom Sheet -->
+    <div id="mobile-drawer-overlay" class="mobile-drawer-overlay" style="display:none;">
+        <div class="mobile-drawer">
+            <div class="mobile-drawer-header">
+                <h3>Options</h3>
+                <button id="mobile-drawer-close" class="mobile-drawer-close-btn">✕</button>
+            </div>
+            <div class="mobile-drawer-body">
+                <div class="drawer-section">
+                    <h4>EXIF Filters</h4>
+                    <div id="drawer-exif-container" class="drawer-content-row"></div>
+                </div>
+                <div class="drawer-section">
+                    <h4>Thumbnail Size</h4>
+                    <div id="drawer-size-container" class="drawer-content-row"></div>
+                </div>
+                <div class="drawer-section">
+                    <h4>System Actions</h4>
+                    <div id="drawer-actions-container" class="drawer-content-row"></div>
+                </div>
+            </div>
         </div>
     </div>
 </body>
