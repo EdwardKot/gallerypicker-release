@@ -31,6 +31,7 @@
         likedIdsCache: null,    // 预缓存的 liked 照片 ID 列表
         focalLength: null,      // active focal length filter (integer or null)
         portraitMode: null,     // active xiaomi portrait filter (integer or null)
+        unauthorized: false,
     };
 
     // ── DOM refs ─────────────────────────────────────────────
@@ -100,6 +101,7 @@
             const pin = input.value.trim();
             if (!pin) return;
             savePin(pin);
+            state.unauthorized = false;
             overlay.style.display = 'none';
             // retry initialisation
             initApp();
@@ -112,11 +114,15 @@
     // ── Helpers ──────────────────────────────────────────────
 
     function api(path, opts = {}) {
+        if (state.unauthorized) {
+            return Promise.reject(new Error('Unauthorized'));
+        }
         opts.headers = Object.assign({}, opts.headers, {
             'X-Gallery-Pin': getPin()
         });
         return fetch(path, opts).then(r => {
             if (r.status === 401) {
+                state.unauthorized = true;
                 showPinDialog('密钥错误，请重试');
                 throw new Error('Unauthorized');
             }

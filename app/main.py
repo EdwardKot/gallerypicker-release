@@ -34,7 +34,7 @@ class PinAuthMiddleware(BaseHTTPMiddleware):
     """
 
     EXEMPT_PREFIXES = ("/static/",)
-    EXEMPT_EXACT = ("/",)
+    EXEMPT_EXACT = ("/", "/favicon.ico")
 
     async def dispatch(self, request: Request, call_next):
         path = request.url.path
@@ -90,26 +90,26 @@ async def lifespan(app: FastAPI):
     print(f"{'='*60}")
     print(f"  Gallery Picker")
     print(f"{'='*60}")
-    print(f"  Photo root : {os.path.expanduser(PHOTO_ROOT)}")
-    print(f"  Access URL : http://{local_ip}:{PORT}")
-    print(f"  访问密钥   : {config.ACCESS_PIN}")
+    print(f"  Photo root / 照片目录 : {os.path.expanduser(PHOTO_ROOT)}")
+    print(f"  Access URL / 访问网址 : http://{local_ip}:{PORT}")
+    print(f"  Access PIN / 访问密钥 : {config.ACCESS_PIN}")
     print(f"{'='*60}")
     print()
-    print("  Stop        Ctrl+C")
-    print("  Restart     ./run.sh")
-    print("  Update      ./update.sh")
+    print("  Stop / 停止服务        Ctrl+C")
+    print("  Restart / 重启服务     ./run.sh")
+    print("  Update / 更新服务      ./update.sh")
     print()
     
     # Initialize database
     await get_db()
     
     # Do initial scan
-    print("Scanning photo library...")
+    print("Scanning photo library / 正在扫描照片库...")
     result = await scan_photos()
-    print(f"Scan complete: {result.get('scanned', 0)} photos found, "
-          f"{result.get('new', 0)} new, {result.get('removed', 0)} removed")
+    print(f"Scan complete / 扫描完成: {result.get('scanned', 0)} photos found / 发现 {result.get('scanned', 0)} 张照片, "
+          f"{result.get('new', 0)} new / 新增 {result.get('new', 0)} 张, {result.get('removed', 0)} removed / 移除 {result.get('removed', 0)} 张")
     if result.get('error'):
-        print(f"WARNING: {result['error']}")
+        print(f"WARNING / 警告: {result['error']}")
     print()
     
     yield
