@@ -1,9 +1,8 @@
 import os
 import asyncio
 import mimetypes
-import time
 from datetime import datetime, timezone
-from fastapi import APIRouter, Query, HTTPException, BackgroundTasks
+from fastapi import APIRouter, Query, HTTPException
 from fastapi.responses import FileResponse, JSONResponse
 from app.database import get_db
 from app.scanner import scan_photos
@@ -11,23 +10,6 @@ from app.thumbnails import generate_thumbnail, get_cache_stats, clear_cache
 from app.config import PHOTO_ROOT, DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE
 
 router = APIRouter()
-
-_last_scan_time = 0.0
-_scan_lock = asyncio.Lock()
-
-async def _background_rescan():
-    global _last_scan_time
-    if _scan_lock.locked():
-        return
-    async with _scan_lock:
-        now = time.time()
-        if now - _last_scan_time < 60.0:  # 60 seconds throttle
-            return
-        try:
-            await scan_photos()
-            _last_scan_time = now
-        except Exception as e:
-            print(f"Background rescan error: {e}")
 
 
 def _build_filter_sort_sql(filter_str: str, sort_str: str,
@@ -62,7 +44,6 @@ def _build_filter_sort_sql(filter_str: str, sort_str: str,
 
 @router.get("/api/photos")
 async def list_photos(
-    background_tasks: BackgroundTasks,
     filter: str = Query("all", pattern="^(all|liked|unliked)$"),
     sort: str = Query("newest", pattern="^(newest|oldest|name_asc|name_desc)$"),
     page: int = Query(1, ge=1),
@@ -102,8 +83,6 @@ async def list_photos(
             "liked": bool(row[4]),
             "filename": os.path.basename(row[1])
         })
-
-    background_tasks.add_task(_background_rescan)
 
     return JSONResponse(
         content={

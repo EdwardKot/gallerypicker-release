@@ -140,6 +140,7 @@ header {
 /* ── Gallery Grid ────────────────────────────────────────── */
 
 #gallery {
+    position: relative;
     padding: 16px;
     min-height: calc(100vh - 52px);
 }
@@ -155,9 +156,9 @@ header {
     font-size: 0.9rem;
     font-weight: bold;
     color: var(--accent);
-    padding: 12px 8px 8px 4px;
+    padding: 8px 8px 6px 4px;
     border-bottom: 1px solid var(--border);
-    margin-top: 8px;
+    margin-top: 4px;
     letter-spacing: 1px;
     text-transform: uppercase;
     display: flex;

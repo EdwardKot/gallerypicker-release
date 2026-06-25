@@ -43,6 +43,7 @@
     };
 
     // ── DOM refs ─────────────────────────────────────────────
+    const $gallery = document.getElementById('gallery');
     const $grid = document.getElementById('photo-grid');
     const $loading = document.getElementById('loading');
     const $empty = document.getElementById('empty-state');
@@ -135,12 +136,18 @@
         if (state.unauthorized) {
             return Promise.reject(new Error('Unauthorized'));
         }
+        const method = (opts.method || 'GET').toUpperCase();
+        let finalPath = path;
+        if (method === 'GET') {
+            const separator = path.includes('?') ? '&' : '?';
+            finalPath = `${path}${separator}_=${Date.now()}`;
+        }
         opts.headers = Object.assign({}, opts.headers, {
             'X-Gallery-Pin': getPin(),
             'Cache-Control': 'no-cache',
             'Pragma': 'no-cache'
         });
-        return fetch(path, opts).then(r => {
+        return fetch(finalPath, opts).then(r => {
             if (r.status === 401) {
                 state.unauthorized = true;
                 showPinDialog('密钥错误，请重试');
@@ -1890,8 +1897,8 @@
                 // Prevent default scrolling so Safari bounce doesn't compete
                 if (e.cancelable) e.preventDefault();
                 
-                document.body.style.transition = 'none';
-                document.body.style.transform = `translateY(${y}px)`;
+                $gallery.style.transition = 'none';
+                $gallery.style.transform = `translateY(${y}px)`;
 
                 if ($ptr) {
                     $ptr.style.opacity = '1';
@@ -1908,8 +1915,8 @@
         } else {
             // If dragging upwards, cancel pulling
             ptrPulling = false;
-            document.body.style.transition = 'transform 0.2s ease';
-            document.body.style.transform = 'translateY(0)';
+            $gallery.style.transition = 'transform 0.2s ease';
+            $gallery.style.transform = 'translateY(0)';
             if ($ptr) {
                 $ptr.classList.remove('ptr-pulling');
                 $ptr.style.opacity = '0';
@@ -1922,14 +1929,14 @@
         ptrPulling = false;
 
         // Retrieve current transform value
-        const transform = document.body.style.transform;
+        const transform = $gallery.style.transform;
         const match = transform.match(/translateY\((\d+\.?\d*)px\)/);
         const y = match ? parseFloat(match[1]) : 0;
 
-        document.body.style.transition = 'transform 0.3s cubic-bezier(0.16, 1, 0.3, 1)';
+        $gallery.style.transition = 'transform 0.3s cubic-bezier(0.16, 1, 0.3, 1)';
 
         if (y >= PTR_THRESHOLD) {
-            document.body.style.transform = `translateY(${PTR_THRESHOLD}px)`;
+            $gallery.style.transform = `translateY(${PTR_THRESHOLD}px)`;
             if ($ptr) {
                 $ptr.classList.remove('ptr-release');
                 $ptr.classList.add('ptr-refreshing');
@@ -1947,7 +1954,7 @@
                 console.error('Pull to refresh rescan failed', e);
                 showToast('刷新失败，请重试');
             } finally {
-                document.body.style.transform = 'translateY(0)';
+                $gallery.style.transform = 'translateY(0)';
                 if ($ptr) {
                     $ptr.classList.remove('ptr-refreshing');
                     $ptr.classList.remove('ptr-pulling');
@@ -1957,7 +1964,7 @@
                 }
             }
         } else {
-            document.body.style.transform = 'translateY(0)';
+            $gallery.style.transform = 'translateY(0)';
             if ($ptr) {
                 $ptr.classList.remove('ptr-pulling');
                 $ptr.style.opacity = '0';
