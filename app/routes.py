@@ -48,8 +48,8 @@ async def list_photos(
     sort: str = Query("newest", pattern="^(newest|oldest|name_asc|name_desc)$"),
     page: int = Query(1, ge=1),
     page_size: int = Query(DEFAULT_PAGE_SIZE, ge=1, le=MAX_PAGE_SIZE),
-    focal_length: int = Query(None, ge=1, le=2000),
-    xiaomi_portrait: int = Query(None, ge=0, le=3),
+    focal_length: int = Query(None),
+    xiaomi_portrait: int = Query(None),
 ):
     db = await get_db()
 
