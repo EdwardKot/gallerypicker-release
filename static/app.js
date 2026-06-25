@@ -818,12 +818,6 @@
                     e.preventDefault();
                     viewerUnlike();
                     break;
-                case 'Digit2':
-                case 'Numpad2':
-                case 'KeyO':
-                    e.preventDefault();
-                    loadOriginalForViewer();
-                    break;
                 case 'KeyD':
                     e.preventDefault();
                     if (state.viewerPhotoId) {

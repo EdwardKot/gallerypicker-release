@@ -1,5 +1,7 @@
 # Gallery Picker
 
+**[简体中文](README_CN.md) | English**
+
 A lightweight, browser-based photo culling tool that runs inside Android Termux.
 
 Designed for professional smartphone sample photographers who want to review large numbers of Android phone photos from a Mac browser, quickly mark selected photos, and download selected originals.
@@ -81,7 +83,6 @@ Stop the server with `Ctrl+C`, then press any key to return to the menu.
    - `1` — Like photo
    - `0` — Unlike photo
    - `D` — Download current photo (viewer)
-   - `2` / `O` — Load original resolution (viewer)
    - `Esc` / `Space` — Close viewer
 6. Filter by All / Liked photos
 7. Select photos with click (Shift+Click for range), then download
