@@ -1,6 +1,5 @@
 import os
 import time
-import asyncio
 from datetime import datetime, timezone
 from pathlib import Path
 from app.config import PHOTO_ROOT, SUPPORTED_EXTENSIONS
@@ -78,54 +77,6 @@ async def scan_photos(photo_root: str = None, db=None) -> dict:
 
     if db is None:
         db = await get_db()
-    
-    # One-time EXIF backfill for existing photos in the database
-    try:
-        cursor = await db.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='system_meta'")
-        has_meta_table = await cursor.fetchone() is not None
-        if not has_meta_table:
-            await db.execute("CREATE TABLE IF NOT EXISTS system_meta (key TEXT PRIMARY KEY, value TEXT)")
-            await db.commit()
-        
-        cursor = await db.execute("SELECT value FROM system_meta WHERE key = 'exif_backfill_done_v2'")
-        row = await cursor.fetchone()
-        backfill_done = row and row[0] == '1'
-        
-        if not backfill_done:
-            print("One-time EXIF backfill: scanning existing photos in database...")
-            cursor = await db.execute("SELECT photo_id, absolute_path FROM photos")
-            photos_to_backfill = await cursor.fetchall()
-            
-            def do_backfill():
-                to_update = []
-                for p in photos_to_backfill:
-                    pid = p["photo_id"]
-                    abs_path = p["absolute_path"]
-                    if os.path.exists(abs_path):
-                        exif = _extract_exif(abs_path)
-                        to_update.append((
-                            exif["focal_length_35mm"],
-                            exif["xiaomi_portrait"],
-                            exif["xiaomi_scene"],
-                            pid
-                        ))
-                return to_update
-
-            to_update = await asyncio.to_thread(do_backfill)
-            
-            if to_update:
-                await db.executemany(
-                    "UPDATE photos SET focal_length_35mm = ?, xiaomi_portrait = ?, xiaomi_scene = ? WHERE photo_id = ?",
-                    to_update
-                )
-                await db.commit()
-            
-            await db.execute("INSERT OR REPLACE INTO system_meta (key, value) VALUES ('exif_backfill_done_v2', '1')")
-            await db.commit()
-            print(f"One-time EXIF backfill completed for {len(to_update)} photos.")
-    except Exception as e:
-        print(f"WARNING: One-time EXIF backfill failed: {e}")
-
     now = datetime.now(timezone.utc).isoformat()
     
     # Fetch all existing records in a single query for O(1) database trip efficiency
