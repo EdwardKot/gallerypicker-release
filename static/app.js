@@ -76,6 +76,8 @@
 
     function savePin(pin) {
         localStorage.setItem(PIN_KEY, pin);
+        // Also set as cookie so <img src> requests (which bypass api()) carry the PIN automatically
+        document.cookie = `gallery_pin=${pin}; path=/; SameSite=Strict`;
     }
 
     function showPinDialog(errorMsg) {
@@ -1326,6 +1328,9 @@
             showPinDialog();
             return;
         }
+
+        // Sync PIN to cookie on every load (cookie may have expired while localStorage persists)
+        savePin(getPin());
 
         setLoading(true);
         try {

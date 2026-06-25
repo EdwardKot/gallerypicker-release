@@ -46,8 +46,8 @@ class PinAuthMiddleware(BaseHTTPMiddleware):
             if path.startswith(prefix):
                 return await call_next(request)
 
-        # Check PIN header
-        pin = request.headers.get("X-Gallery-Pin", "")
+        # Check PIN — header (API calls) or cookie (img src / direct browser loads)
+        pin = request.headers.get("X-Gallery-Pin", "") or request.cookies.get("gallery_pin", "")
         if pin == config.ACCESS_PIN:
             return await call_next(request)
 
