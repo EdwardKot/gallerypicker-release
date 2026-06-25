@@ -14,9 +14,9 @@ except ImportError:
 
 # Fallback for Pillow < 9.1.0 where Image.Resampling doesn't exist
 try:
-    RESAMPLE_FILTER = Image.Resampling.BICUBIC
+    _LANCZOS = Image.Resampling.LANCZOS
 except AttributeError:
-    RESAMPLE_FILTER = Image.BICUBIC
+    _LANCZOS = Image.LANCZOS
 
 
 def get_thumbnail_cache_key(photo_id: str, file_size: int, mtime: float, size: int) -> str:
@@ -49,29 +49,25 @@ def generate_thumbnail(source_path: str, photo_id: str, file_size: int, mtime: f
     # Generate thumbnail
     try:
         with Image.open(source_path) as img:
+            # Hint libjpeg to decode at reduced resolution (powers of 2 only).
+            # For JPEG this happens inside the DCT stage — less I/O work, less memory.
+            # We ask for 2× the target so the subsequent LANCZOS pass has enough detail.
+            # draft() is a hint; libjpeg picks the nearest supported scale (1/2, 1/4, 1/8).
+            # Only effective for JPEG; silently ignored for HEIC/PNG/etc.
+            img.draft("RGB", (size * 2, size * 2))
+
             # Handle EXIF orientation
             try:
                 from PIL import ImageOps
                 img = ImageOps.exif_transpose(img)
             except Exception:
                 pass
-            
-            # Calculate new size preserving aspect ratio
-            # Long edge = size
-            w, h = img.size
-            if w >= h:
-                new_w = size
-                new_h = int(h * size / w)
-            else:
-                new_h = size
-                new_w = int(w * size / h)
-            
-            # Resize with bicubic filter (2-3x faster than Lanczos on mobile, visually identical)
+
+            # thumbnail() is strictly aspect-ratio preserving, long-edge ≤ size, no crop.
             img = img.convert("RGB")
-            img = img.resize((new_w, new_h), RESAMPLE_FILTER)
-            
-            # Save without optimize=True to avoid CPU-intensive multi-pass Huffman optimization
-            img.save(thumb_path, "JPEG", quality=85)
+            img.thumbnail((size, size), _LANCZOS)
+
+            img.save(thumb_path, "JPEG", quality=85, subsampling=0)
             return thumb_path
     except Exception as e:
         # If thumbnail generation fails, raise
