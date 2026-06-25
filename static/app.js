@@ -73,7 +73,13 @@
     const $settingsPreviewSize = document.getElementById('settings-preview-size');
     const $countAll = document.getElementById('count-all');
     const $countLiked = document.getElementById('count-liked');
-    const $downloadOverlay = document.getElementById('download-overlay');
+    const $downloadPanel = document.getElementById('download-panel');
+    const $downloadTitleText = document.getElementById('download-title-text');
+    const $downloadDismiss = document.getElementById('download-dismiss');
+    const $floatingSelectBar = document.getElementById('floating-select-bar');
+    const $selectCountBadge = document.getElementById('select-count-badge');
+    const $floatingDownloadBtn = document.getElementById('floating-download-btn');
+    const $floatingCancelBtn = document.getElementById('floating-cancel-btn');
     const $downloadCancel = document.getElementById('download-cancel');
     const $downloadCurrent = document.getElementById('download-current');
     const $downloadTotal = document.getElementById('download-total');
@@ -941,18 +947,32 @@
     }
 
     function updateDownloadButton() {
+        const isDownloading = !!downloadAbort;
+        if ($btnDownload) {
+            $btnDownload.disabled = isDownloading;
+        }
+        if ($floatingDownloadBtn) {
+            $floatingDownloadBtn.disabled = isDownloading;
+        }
+
         if (state.selectedSet.size > 0) {
-            $btnDownload.textContent = `⬇ Download Selected (${state.selectedSet.size})`;
-            $btnDownload.title = `Download selected photos (${state.selectedSet.size})`;
-            if ($btnClearSelection) $btnClearSelection.style.display = '';
-        } else if (state.focusedPhotoId) {
-            $btnDownload.textContent = '⬇ Download This';
-            $btnDownload.title = 'Download focused photo';
+            if ($btnDownload) $btnDownload.style.display = 'none';
             if ($btnClearSelection) $btnClearSelection.style.display = 'none';
+
+            if ($floatingSelectBar) $floatingSelectBar.style.display = 'flex';
+            if ($selectCountBadge) $selectCountBadge.textContent = state.selectedSet.size;
         } else {
-            $btnDownload.textContent = '⬇ Download Liked';
-            $btnDownload.title = 'Download all liked photos';
+            if ($floatingSelectBar) $floatingSelectBar.style.display = 'none';
+            if ($btnDownload) $btnDownload.style.display = '';
             if ($btnClearSelection) $btnClearSelection.style.display = 'none';
+
+            if (state.focusedPhotoId) {
+                $btnDownload.textContent = '⬇ Download This';
+                $btnDownload.title = 'Download focused photo';
+            } else {
+                $btnDownload.textContent = '⬇ Download Liked';
+                $btnDownload.title = 'Download all liked photos';
+            }
         }
     }
 
@@ -1400,13 +1420,18 @@
     }
 
     let downloadAbort = null;
+    let downloadProgressTimer = null;
 
     function showDownloadProgress(total) {
+        if (downloadProgressTimer) clearTimeout(downloadProgressTimer);
         $downloadCurrent.textContent = '0';
         $downloadTotal.textContent = String(total);
         $downloadFilename.textContent = '';
         $downloadProgressFill.style.width = '0%';
-        $downloadOverlay.style.display = '';
+        if ($downloadTitleText) $downloadTitleText.textContent = 'Downloading…';
+        if ($downloadCancel) $downloadCancel.style.display = '';
+        if ($downloadDismiss) $downloadDismiss.style.display = 'none';
+        if ($downloadPanel) $downloadPanel.style.display = 'block';
     }
 
     function updateDownloadProgress(current, total, filename) {
@@ -1416,16 +1441,34 @@
     }
 
     function hideDownloadProgress() {
-        $downloadOverlay.style.display = 'none';
+        if (downloadProgressTimer) clearTimeout(downloadProgressTimer);
+        if ($downloadPanel) $downloadPanel.style.display = 'none';
+    }
+
+    function setDownloadFinishedState(status) {
+        if ($downloadCancel) $downloadCancel.style.display = 'none';
+        if ($downloadDismiss) $downloadDismiss.style.display = 'block';
+        
+        if (status === 'Complete') {
+            if ($downloadTitleText) $downloadTitleText.textContent = 'Download Complete';
+            if (downloadProgressTimer) clearTimeout(downloadProgressTimer);
+            downloadProgressTimer = setTimeout(() => {
+                hideDownloadProgress();
+            }, 3000);
+        } else if (status === 'Cancelled') {
+            if ($downloadTitleText) $downloadTitleText.textContent = 'Download Cancelled';
+        } else {
+            if ($downloadTitleText) $downloadTitleText.textContent = 'Download Failed';
+        }
     }
 
     // Bulk download with File System Access API (works on localhost/HTTPS)
     async function downloadBulkWithFSAccess(dirHandle, ids) {
         const abort = new AbortController();
         downloadAbort = abort;
+        updateDownloadButton();
 
         showDownloadProgress(ids.length);
-        $btnDownload.disabled = true;
 
         const existingNames = new Set();
         try {
@@ -1465,19 +1508,18 @@
             }
         }
 
-        hideDownloadProgress();
-        $btnDownload.disabled = false;
         downloadAbort = null;
+        updateDownloadButton();
 
         if (abort.signal.aborted) {
             showToast(`Download cancelled (${completed - failed}/${ids.length} saved)`);
-            // Selection kept intentionally so user can retry
+            setDownloadFinishedState('Cancelled');
         } else if (failed > 0) {
             showToast(`Downloaded ${completed - failed}/${ids.length} (${failed} failed)`, 4000);
-            clearSelection();
+            setDownloadFinishedState('Failed');
         } else {
             showToast(`Downloaded ${ids.length} photos ✓`);
-            clearSelection();
+            setDownloadFinishedState('Complete');
         }
     }
 
@@ -1491,9 +1533,9 @@
 
         const abort = new AbortController();
         downloadAbort = abort;
+        updateDownloadButton();
 
         showDownloadProgress(ids.length);
-        $btnDownload.disabled = true;
 
         let completed = 0;
         let failed = 0;
@@ -1531,25 +1573,43 @@
             }
         }
 
-        hideDownloadProgress();
-        $btnDownload.disabled = false;
         downloadAbort = null;
+        updateDownloadButton();
 
         if (abort.signal.aborted) {
             showToast(`Download cancelled (${completed - failed}/${ids.length} saved)`);
-            // Selection kept intentionally so user can retry
+            setDownloadFinishedState('Cancelled');
         } else if (failed > 0) {
             showToast(`Downloaded ${completed - failed}/${ids.length} (${failed} failed)`, 4000);
-            clearSelection();
+            setDownloadFinishedState('Failed');
         } else {
             showToast(`Downloaded ${ids.length} photos ✓`);
-            clearSelection();
+            setDownloadFinishedState('Complete');
         }
     }
 
     if ($downloadCancel) {
         $downloadCancel.addEventListener('click', () => {
             if (downloadAbort) downloadAbort.abort();
+        });
+    }
+
+    if ($floatingDownloadBtn) {
+        $floatingDownloadBtn.addEventListener('click', () => {
+            if (downloadAbort) return; // Prevent double trigger
+            $btnDownload.click();
+        });
+    }
+
+    if ($floatingCancelBtn) {
+        $floatingCancelBtn.addEventListener('click', () => {
+            clearSelection();
+        });
+    }
+
+    if ($downloadDismiss) {
+        $downloadDismiss.addEventListener('click', () => {
+            hideDownloadProgress();
         });
     }
 
@@ -1597,12 +1657,14 @@
                 // 失败则走同步回退
             }
             if (dirHandle) {
+                clearSelection();
                 await downloadBulkWithFSAccess(dirHandle, ids);
                 return;
             }
         }
 
         // HTTP 回退：同步锚点下载（保留用户手势，不经过 fetch）
+        clearSelection();
         downloadBulkSync(ids);
     });
 

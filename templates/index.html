@@ -82,23 +82,38 @@
 
     <div id="toast" class="toast"></div>
 
-    <!-- Download Progress Overlay -->
-    <div id="download-overlay" class="download-overlay" style="display:none">
-        <div class="download-panel">
-            <div class="download-header">
-                <h2>Downloading…</h2>
-                <button id="download-cancel" class="download-cancel-btn">✕ Cancel</button>
-            </div>
-            <div class="download-body">
-                <div class="download-progress-text">
-                    <span id="download-current">0</span> / <span id="download-total">0</span>
-                </div>
-                <div class="download-filename" id="download-filename"></div>
-                <div class="download-progress-bar">
-                    <div class="download-progress-fill" id="download-progress-fill"></div>
-                </div>
-            </div>
+    <!-- Non-blocking Download Progress Panel -->
+    <div id="download-panel" class="download-panel" style="display:none">
+        <div class="download-header">
+            <h2 id="download-title-text">Downloading…</h2>
+            <button id="download-cancel" class="download-cancel-btn" title="Cancel Download">✕</button>
         </div>
+        <div class="download-body">
+            <div class="download-progress-text">
+                <span id="download-current">0</span> / <span id="download-total">0</span>
+            </div>
+            <div class="download-filename" id="download-filename"></div>
+            <div class="download-progress-bar">
+                <div class="download-progress-fill" id="download-progress-fill"></div>
+            </div>
+            <button id="download-dismiss" class="download-dismiss-btn" style="display:none">Dismiss</button>
+        </div>
+    </div>
+
+    <!-- Floating Multi-select pill bar -->
+    <div id="floating-select-bar" class="floating-select-bar" style="display:none">
+        <span class="floating-select-count">已选择 <span id="select-count-badge">0</span> 项</span>
+        <div class="floating-select-divider"></div>
+        <button id="floating-download-btn" class="floating-download-btn">
+            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                <polyline points="7 10 12 15 17 10"></polyline>
+                <line x1="12" y1="15" x2="12" y2="3"></line>
+            </svg>
+            <span>Download</span>
+        </button>
+        <div class="floating-select-divider"></div>
+        <button id="floating-cancel-btn" class="floating-cancel-btn">取消</button>
     </div>
 
     <!-- Settings Modal -->
