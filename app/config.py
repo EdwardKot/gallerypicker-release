@@ -21,7 +21,7 @@ DATABASE_PATH = os.environ.get("DATABASE_PATH", str(BASE_DIR / "data" / "gallery
 CACHE_DIR = os.environ.get("CACHE_DIR", str(BASE_DIR / "cache" / "thumbnails"))
 
 # Supported image extensions
-SUPPORTED_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp", ".heic", ".heif"}
+SUPPORTED_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp", ".heic", ".heif", ".dng"}
 
 # Pagination
 DEFAULT_PAGE_SIZE = 100
