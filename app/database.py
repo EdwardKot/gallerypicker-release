@@ -54,6 +54,12 @@ async def init_db(db: aiosqlite.Connection):
         await db.execute("ALTER TABLE photos ADD COLUMN liked INTEGER NOT NULL DEFAULT 0")
     if "updated_at" not in columns:
         await db.execute("ALTER TABLE photos ADD COLUMN updated_at TEXT")
+    if "focal_length_35mm" not in columns:
+        await db.execute("ALTER TABLE photos ADD COLUMN focal_length_35mm INTEGER")
+    if "xiaomi_portrait" not in columns:
+        await db.execute("ALTER TABLE photos ADD COLUMN xiaomi_portrait INTEGER")
+    if "xiaomi_scene" not in columns:
+        await db.execute("ALTER TABLE photos ADD COLUMN xiaomi_scene INTEGER")
 
     # 3. Perform data migration if upgrading from the old two-table schema
     if has_photo_meta:
@@ -73,6 +79,8 @@ async def init_db(db: aiosqlite.Connection):
         CREATE INDEX IF NOT EXISTS idx_photos_mtime_id ON photos(mtime DESC, photo_id DESC);
         CREATE INDEX IF NOT EXISTS idx_photos_relative_path ON photos(relative_path);
         CREATE INDEX IF NOT EXISTS idx_photos_liked ON photos(liked);
+        CREATE INDEX IF NOT EXISTS idx_photos_focal_length ON photos(focal_length_35mm);
+        CREATE INDEX IF NOT EXISTS idx_photos_xiaomi_portrait ON photos(xiaomi_portrait);
     """)
         
     await db.commit()

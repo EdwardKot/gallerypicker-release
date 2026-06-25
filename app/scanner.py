@@ -7,6 +7,55 @@ from app.utils import compute_photo_id
 from app.database import get_db
 
 
+# EXIF tag constants
+_TAG_FOCAL_LENGTH_35MM = 0xA405
+_TAG_MAKE              = 0x010F
+_TAG_MAKER_NOTE        = 0x927C
+_TAG_XIAOMI_PORTRAIT   = 0x889F
+_TAG_XIAOMI_SCENE      = 0x8889
+
+
+def _extract_exif(abs_path: str) -> dict:
+    """Extract EXIF fields we care about. Returns a dict with keys:
+      focal_length_35mm, xiaomi_portrait, xiaomi_scene  (all may be None)
+    Only attempts Xiaomi private tags when Make == 'Xiaomi'.
+    Fast: reads only the EXIF header, never decodes image pixels."""
+    result = {"focal_length_35mm": None, "xiaomi_portrait": None, "xiaomi_scene": None}
+    try:
+        from PIL import Image
+        with Image.open(abs_path) as img:
+            exif = img.getexif()
+            if not exif:
+                return result
+
+            # Standard tag: 35mm equivalent focal length
+            fl = exif.get(_TAG_FOCAL_LENGTH_35MM)
+            if fl is not None:
+                try:
+                    result["focal_length_35mm"] = int(fl)
+                except (TypeError, ValueError):
+                    pass
+
+            # Xiaomi private tags — only attempt for Xiaomi bodies
+            make = (exif.get(_TAG_MAKE) or "").strip()
+            if make.lower() == "xiaomi":
+                try:
+                    maker_ifd = exif.get_ifd(_TAG_MAKER_NOTE)
+                    if maker_ifd:
+                        portrait = maker_ifd.get(_TAG_XIAOMI_PORTRAIT)
+                        scene    = maker_ifd.get(_TAG_XIAOMI_SCENE)
+                        if portrait is not None:
+                            result["xiaomi_portrait"] = int(portrait)
+                        if scene is not None:
+                            result["xiaomi_scene"] = int(scene)
+                except Exception:
+                    pass  # MakerNote parse failure is non-fatal
+
+    except Exception:
+        pass  # Unreadable EXIF is non-fatal
+    return result
+
+
 async def scan_photos(photo_root: str = None, db=None) -> dict:
     """Scan the photo root directory and update the SQLite index.
     Returns stats about the scan."""
@@ -91,8 +140,13 @@ async def scan_photos(photo_root: str = None, db=None) -> dict:
                     new_count += 1
                     liked_val = 0
                     updated_at_val = None
-                    
-                to_insert.append((photo_id, rel_path, abs_path, file_size, mtime, liked_val, updated_at_val, now))
+
+                exif = _extract_exif(abs_path)
+                to_insert.append((
+                    photo_id, rel_path, abs_path, file_size, mtime,
+                    liked_val, updated_at_val, now,
+                    exif["focal_length_35mm"], exif["xiaomi_portrait"], exif["xiaomi_scene"],
+                ))
                 
     # Detect files that were removed from the disk
     removed_ids = set(existing_paths.keys()) - found_ids
@@ -107,8 +161,11 @@ async def scan_photos(photo_root: str = None, db=None) -> dict:
         await db.executemany("UPDATE photos SET absolute_path = ? WHERE photo_id = ?", to_update_path)
     if to_insert:
         await db.executemany(
-            """INSERT INTO photos (photo_id, relative_path, absolute_path, file_size, mtime, liked, updated_at, indexed_at)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+            """INSERT INTO photos
+               (photo_id, relative_path, absolute_path, file_size, mtime,
+                liked, updated_at, indexed_at,
+                focal_length_35mm, xiaomi_portrait, xiaomi_scene)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             to_insert
         )
         

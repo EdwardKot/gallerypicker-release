@@ -29,6 +29,8 @@
         isLoadingMore: false,
         hasMorePages: true,
         likedIdsCache: null,    // 预缓存的 liked 照片 ID 列表
+        focalLength: null,      // active focal length filter (integer or null)
+        portraitMode: null,     // active xiaomi portrait filter (integer or null)
     };
 
     // ── DOM refs ─────────────────────────────────────────────
@@ -65,6 +67,9 @@
     const $downloadTotal = document.getElementById('download-total');
     const $downloadFilename = document.getElementById('download-filename');
     const $downloadProgressFill = document.getElementById('download-progress-fill');
+
+    const $filterFocalLength = document.getElementById('filter-focal-length');
+    const $filterPortrait    = document.getElementById('filter-portrait');
 
     // ── PIN Auth ─────────────────────────────────────────────
 
@@ -169,7 +174,9 @@
 
         try {
             const data = await apiJson(
-                `/api/photos?filter=${state.currentFilter}&sort=${state.currentSort}&page=${state.currentPage}&page_size=${state.pageSize}`
+                `/api/photos?filter=${state.currentFilter}&sort=${state.currentSort}&page=${state.currentPage}&page_size=${state.pageSize}` +
+                (state.focalLength  !== null ? `&focal_length=${state.focalLength}`   : '') +
+                (state.portraitMode !== null ? `&xiaomi_portrait=${state.portraitMode}` : '')
             );
             const newPhotos = data.photos ?? [];
 
@@ -1335,6 +1342,7 @@
         setLoading(true);
         try {
             await fetchCounts();
+            await fetchFilters();
             await fetchPhotos();
             await refreshLikedIdsCache();
         } catch (e) {
@@ -1347,6 +1355,42 @@
     }
 
     initApp();
+
+    // ── EXIF filters ─────────────────────────────────────────
+
+    async function fetchFilters() {
+        try {
+            const data = await apiJson('/api/filters');
+
+            // Populate focal length dropdown dynamically
+            $filterFocalLength.innerHTML = '<option value="">All focal lengths</option>';
+            (data.focal_lengths || []).forEach(fl => {
+                const opt = document.createElement('option');
+                opt.value = fl;
+                opt.textContent = `${fl}mm`;
+                $filterFocalLength.appendChild(opt);
+            });
+
+            // Show portrait dropdown only when library has Xiaomi portrait data
+            $filterPortrait.style.display = data.has_xiaomi_portrait ? '' : 'none';
+        } catch (e) {
+            console.error('fetchFilters', e);
+        }
+    }
+
+    $filterFocalLength.addEventListener('change', () => {
+        const val = $filterFocalLength.value;
+        state.focalLength = val ? parseInt(val, 10) : null;
+        state.focusedPhotoId = null;
+        fetchPhotos();
+    });
+
+    $filterPortrait.addEventListener('change', () => {
+        const val = $filterPortrait.value;
+        state.portraitMode = val !== '' ? parseInt(val, 10) : null;
+        state.focusedPhotoId = null;
+        fetchPhotos();
+    });
 
     // ── Settings panel ──────────────────────────────────────
 

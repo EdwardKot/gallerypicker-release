@@ -769,3 +769,28 @@ header {
 .settings-select:focus {
     border-color: var(--accent);
 }
+
+/* EXIF filter dropdowns */
+.exif-filters {
+    display: flex;
+    gap: 6px;
+    margin-top: 6px;
+    flex-wrap: wrap;
+    justify-content: center;
+}
+
+.exif-filter-select {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--text-primary);
+    font-size: 12px;
+    padding: 4px 8px;
+    cursor: pointer;
+    outline: none;
+    max-width: 160px;
+}
+
+.exif-filter-select:focus {
+    border-color: var(--accent);
+}

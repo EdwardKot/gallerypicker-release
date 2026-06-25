@@ -12,17 +12,26 @@ from app.config import PHOTO_ROOT, DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE
 router = APIRouter()
 
 
-def _build_filter_sort_sql(filter_str: str, sort_str: str):
+def _build_filter_sort_sql(filter_str: str, sort_str: str,
+                            focal_length: int = None, xiaomi_portrait: int = None):
     conditions = []
     if filter_str == "liked":
         conditions.append("liked = 1")
     elif filter_str == "unliked":
         conditions.append("liked = 0")
-    
-    where_clause = ""
-    if conditions:
-        where_clause = " WHERE " + " AND ".join(conditions)
-        
+
+    if focal_length is not None:
+        conditions.append(f"focal_length_35mm = {int(focal_length)}")
+
+    if xiaomi_portrait is not None:
+        if xiaomi_portrait == 0:
+            # 0 = all portrait modes (2 or 3)
+            conditions.append("xiaomi_portrait IN (2, 3)")
+        else:
+            conditions.append(f"xiaomi_portrait = {int(xiaomi_portrait)}")
+
+    where_clause = (" WHERE " + " AND ".join(conditions)) if conditions else ""
+
     sort_map = {
         "newest": "mtime DESC, photo_id DESC",
         "oldest": "mtime ASC, photo_id ASC",
@@ -38,29 +47,26 @@ async def list_photos(
     filter: str = Query("all", pattern="^(all|liked|unliked)$"),
     sort: str = Query("newest", pattern="^(newest|oldest|name_asc|name_desc)$"),
     page: int = Query(1, ge=1),
-    page_size: int = Query(DEFAULT_PAGE_SIZE, ge=1, le=MAX_PAGE_SIZE)
+    page_size: int = Query(DEFAULT_PAGE_SIZE, ge=1, le=MAX_PAGE_SIZE),
+    focal_length: int = Query(None, ge=1, le=2000),
+    xiaomi_portrait: int = Query(None, ge=0, le=3),
 ):
     db = await get_db()
-    
-    # Build query
-    base = """SELECT photo_id, relative_path, file_size, mtime, liked
-              FROM photos"""
-    
-    where, order = _build_filter_sort_sql(filter, sort)
+
+    where, order = _build_filter_sort_sql(filter, sort, focal_length, xiaomi_portrait)
     params = []
-    
-    # Count
+
     count_query = f"SELECT COUNT(*) FROM photos{where}"
     cursor = await db.execute(count_query, params)
     row = await cursor.fetchone()
     total = row[0]
-    
-    # Paginate
+
     offset = (page - 1) * page_size
-    query = base + where + order + f" LIMIT ? OFFSET ?"
+    base = "SELECT photo_id, relative_path, file_size, mtime, liked FROM photos"
+    query = base + where + order + " LIMIT ? OFFSET ?"
     cursor = await db.execute(query, params + [page_size, offset])
     rows = await cursor.fetchall()
-    
+
     photos = []
     for row in rows:
         photos.append({
@@ -82,6 +88,30 @@ async def list_photos(
         },
         headers={"Cache-Control": "no-cache, no-store, must-revalidate"}
     )
+
+
+@router.get("/api/filters")
+async def get_filters():
+    """Return available filter options derived from the indexed library.
+    focal_lengths: sorted list of distinct 35mm-equivalent focal lengths found.
+    has_xiaomi_portrait: true if any photo has xiaomi_portrait IN (2,3)."""
+    db = await get_db()
+
+    cursor = await db.execute(
+        "SELECT DISTINCT focal_length_35mm FROM photos "
+        "WHERE focal_length_35mm IS NOT NULL ORDER BY focal_length_35mm ASC"
+    )
+    focal_lengths = [row[0] for row in await cursor.fetchall()]
+
+    cursor = await db.execute(
+        "SELECT COUNT(*) FROM photos WHERE xiaomi_portrait IN (2, 3)"
+    )
+    xiaomi_count = (await cursor.fetchone())[0]
+
+    return {
+        "focal_lengths": focal_lengths,
+        "has_xiaomi_portrait": xiaomi_count > 0,
+    }
 
 
 @router.get("/api/photo/{photo_id}")

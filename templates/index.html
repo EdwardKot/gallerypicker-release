@@ -16,6 +16,17 @@
                 <button class="filter-btn active" data-filter="all">All <span id="count-all">0</span></button>
                 <button class="filter-btn" data-filter="liked">Liked <span id="count-liked">0</span></button>
             </div>
+            <div class="exif-filters">
+                <select id="filter-focal-length" class="exif-filter-select" title="Filter by focal length">
+                    <option value="">All focal lengths</option>
+                </select>
+                <select id="filter-portrait" class="exif-filter-select" style="display:none" title="Filter by portrait mode">
+                    <option value="">All modes</option>
+                    <option value="0">All portrait</option>
+                    <option value="2">大师人像</option>
+                    <option value="3">徕卡人像</option>
+                </select>
+            </div>
         </div>
         <div class="header-right">
             <button id="btn-settings" class="tool-btn" title="Settings">⚙ Settings</button>
