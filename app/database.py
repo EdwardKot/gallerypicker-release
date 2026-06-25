@@ -42,7 +42,8 @@ async def init_db(db: aiosqlite.Connection):
             liked INTEGER NOT NULL DEFAULT 0,
             updated_at TEXT,
             created_at TEXT,
-            indexed_at TEXT NOT NULL
+            indexed_at TEXT NOT NULL,
+            scanner_version INTEGER NOT NULL DEFAULT 1
         );
     """)
 
@@ -60,6 +61,8 @@ async def init_db(db: aiosqlite.Connection):
         await db.execute("ALTER TABLE photos ADD COLUMN xiaomi_portrait INTEGER")
     if "xiaomi_scene" not in columns:
         await db.execute("ALTER TABLE photos ADD COLUMN xiaomi_scene INTEGER")
+    if "scanner_version" not in columns:
+        await db.execute("ALTER TABLE photos ADD COLUMN scanner_version INTEGER NOT NULL DEFAULT 1")
 
     # 3. Perform data migration if upgrading from the old two-table schema
     if has_photo_meta:

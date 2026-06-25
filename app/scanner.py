@@ -14,6 +14,9 @@ _TAG_MAKER_NOTE        = 0x927C
 _TAG_XIAOMI_PORTRAIT   = 0x889F
 _TAG_XIAOMI_SCENE      = 0x8889
 
+# Scanner rules version (increment when EXIF extraction rules change to force re-scanning of metadata)
+CURRENT_SCANNER_VERSION = 2
+
 
 def _extract_exif(abs_path: str) -> dict:
     """Extract EXIF fields we care about. Returns a dict with keys:
@@ -91,13 +94,14 @@ async def scan_photos(photo_root: str = None, db=None) -> dict:
     now = datetime.now(timezone.utc).isoformat()
     
     # Fetch all existing records in a single query for O(1) database trip efficiency
-    cursor = await db.execute("SELECT photo_id, relative_path, absolute_path, liked, updated_at FROM photos")
+    cursor = await db.execute("SELECT photo_id, relative_path, absolute_path, liked, updated_at, scanner_version FROM photos")
     rows = await cursor.fetchall()
     
     # In-memory lookups
     existing_paths = {row["photo_id"]: row["absolute_path"] for row in rows}
     existing_likes = {row["photo_id"]: row["liked"] for row in rows}
     existing_updated_at = {row["photo_id"]: row["updated_at"] for row in rows}
+    existing_versions = {row["photo_id"]: (row["scanner_version"] or 1) for row in rows}
     relative_to_id = {row["relative_path"]: row["photo_id"] for row in rows}
     
     found_ids = set()
@@ -105,8 +109,9 @@ async def scan_photos(photo_root: str = None, db=None) -> dict:
     updated_count = 0
     scanned_count = 0
     
-    to_insert = []        # List of tuples: (photo_id, rel_path, abs_path, file_size, mtime, liked, updated_at, indexed_at)
+    to_insert = []        # List of tuples: (photo_id, rel_path, abs_path, file_size, mtime, liked, updated_at, indexed_at, focal_length_35mm, xiaomi_portrait, xiaomi_scene, scanner_version)
     to_update_path = []   # List of tuples: (abs_path, photo_id)
+    to_update_exif = []   # List of tuples: (focal_length_35mm, xiaomi_portrait, xiaomi_scene, scanner_version, photo_id)
     to_delete = []        # List of tuples: (photo_id,)
     
     for dirpath, dirnames, filenames in os.walk(root):
@@ -140,6 +145,17 @@ async def scan_photos(photo_root: str = None, db=None) -> dict:
                 # Photo is unchanged. Check if physical path needs update (e.g., symlinks or case changes)
                 if existing_paths[photo_id] != abs_path:
                     to_update_path.append((abs_path, photo_id))
+                
+                # Check if scanner version is outdated (e.g., new EXIF rules added)
+                if existing_versions.get(photo_id, 1) < CURRENT_SCANNER_VERSION:
+                    exif = _extract_exif(abs_path)
+                    to_update_exif.append((
+                        exif["focal_length_35mm"],
+                        exif["xiaomi_portrait"],
+                        exif["xiaomi_scene"],
+                        CURRENT_SCANNER_VERSION,
+                        photo_id
+                    ))
             else:
                 # Photo is either brand new or modified on disk
                 if rel_path in relative_to_id:
@@ -161,6 +177,7 @@ async def scan_photos(photo_root: str = None, db=None) -> dict:
                     photo_id, rel_path, abs_path, file_size, mtime,
                     liked_val, updated_at_val, now,
                     exif["focal_length_35mm"], exif["xiaomi_portrait"], exif["xiaomi_scene"],
+                    CURRENT_SCANNER_VERSION,
                 ))
                 
     # Detect files that were removed from the disk
@@ -174,13 +191,20 @@ async def scan_photos(photo_root: str = None, db=None) -> dict:
         await db.executemany("DELETE FROM photos WHERE photo_id = ?", to_delete)
     if to_update_path:
         await db.executemany("UPDATE photos SET absolute_path = ? WHERE photo_id = ?", to_update_path)
+    if to_update_exif:
+        await db.executemany(
+            """UPDATE photos 
+               SET focal_length_35mm = ?, xiaomi_portrait = ?, xiaomi_scene = ?, scanner_version = ?
+               WHERE photo_id = ?""",
+            to_update_exif
+        )
     if to_insert:
         await db.executemany(
             """INSERT INTO photos
                (photo_id, relative_path, absolute_path, file_size, mtime,
                 liked, updated_at, indexed_at,
-                focal_length_35mm, xiaomi_portrait, xiaomi_scene)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                focal_length_35mm, xiaomi_portrait, xiaomi_scene, scanner_version)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             to_insert
         )
         
