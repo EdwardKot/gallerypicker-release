@@ -1371,6 +1371,7 @@
             const count = data.scanned ?? data.total_in_db ?? '?';
             showToast(`Rescan complete: ${count} photos`);
             await fetchCounts();
+            await fetchFilters();
             await fetchPhotos();
         } catch (e) {
             showToast('Rescan failed');
@@ -1731,11 +1732,19 @@
                 const opt = document.createElement('option');
                 opt.value = fl;
                 opt.textContent = `${fl}mm`;
+                if (state.focalLength === fl) {
+                    opt.selected = true;
+                }
                 $filterFocalLength.appendChild(opt);
             });
 
             // Show portrait dropdown only when library has Xiaomi portrait data
             $filterPortrait.style.display = data.has_xiaomi_portrait ? '' : 'none';
+            if (state.portraitMode !== null) {
+                $filterPortrait.value = state.portraitMode;
+            } else {
+                $filterPortrait.value = '';
+            }
         } catch (e) {
             console.error('fetchFilters', e);
         }
