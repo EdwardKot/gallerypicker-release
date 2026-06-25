@@ -397,6 +397,10 @@ header {
     max-width: 30vw;
 }
 
+.viewer-filename-top {
+    display: none;
+}
+
 .viewer-nav-btn {
     width: 40px;
     height: 40px;
@@ -957,7 +961,7 @@ body.is-touch .viewer-touch-pill {
     width: 56px;
     height: 56px;
     border-radius: 50%;
-    border: 1px solid rgba(255, 255, 255, 0.15);
+    border: none;
     background: rgba(13, 13, 13, 0.5);
     backdrop-filter: blur(12px);
     -webkit-backdrop-filter: blur(12px);
@@ -1000,6 +1004,27 @@ body.is-touch .viewer-touch-pill {
 /* Hide standard viewer liked indicator when touch pill is active to avoid redundancy */
 body.is-touch #viewer-liked {
     display: none;
+}
+
+/* Adjust viewer filename layout on touch to prevent overlap with the floating pill */
+body.is-touch .viewer-filename-bottom {
+    display: none;
+}
+
+body.is-touch .viewer-filename-top {
+    display: inline-block;
+    max-width: 55vw;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 13px;
+    color: var(--text-secondary);
+}
+
+body.is-touch .viewer-filename-top::before {
+    content: " • ";
+    margin: 0 4px;
+    opacity: 0.6;
 }
 
 /* Safe Area Spacings (iOS / iPadOS) */

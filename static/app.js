@@ -51,6 +51,7 @@
     const $viewerPosition = document.getElementById('viewer-position');
     const $viewerLiked = document.getElementById('viewer-liked');
     const $viewerFilenameBottom = document.getElementById('viewer-filename-bottom');
+    const $viewerFilenameTop = document.getElementById('viewer-filename-top');
     const $viewerBtnPrev = document.getElementById('viewer-btn-prev');
     const $viewerBtnNext = document.getElementById('viewer-btn-next');
     const $viewerClose = document.getElementById('viewer-close');
@@ -654,6 +655,7 @@
 
                 // Always update filename
                 $viewerFilenameBottom.textContent = photo.filename || photoId;
+                if ($viewerFilenameTop) $viewerFilenameTop.textContent = photo.filename || photoId;
 
                 // Update position only if API returned valid index
                 if (photo.index !== undefined && photo.index !== -1 && photo.total > 0) {
@@ -685,6 +687,7 @@
                 console.error('updateViewerInfo failed', err);
                 if (state.viewerPhotoId === expectedId) {
                     $viewerFilenameBottom.textContent = photoId;
+                    if ($viewerFilenameTop) $viewerFilenameTop.textContent = photoId;
                     // Keep grid-populated position and liked state (don't clear them)
                 }
             });
