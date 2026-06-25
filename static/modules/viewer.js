@@ -146,7 +146,13 @@ export function loadOriginalForViewer() {
 
 export function updateViewerInfo(photoId) {
     const expectedId = photoId;
-    const url = `/api/photo/${photoId}?filter=${state.currentFilter}&sort=${state.currentSort}`;
+    let url = `/api/photo/${photoId}?filter=${state.currentFilter}&sort=${state.currentSort}`;
+    if (state.focalLength !== null) {
+        url += `&focal_length=${state.focalLength}`;
+    }
+    if (state.portraitMode !== null) {
+        url += `&xiaomi_portrait=${state.portraitMode}`;
+    }
 
     const $viewerFilenameBottom = document.getElementById('viewer-filename-bottom');
     const $viewerFilenameTop = document.getElementById('viewer-filename-top');
@@ -218,7 +224,14 @@ export function viewerPrev() {
     } else {
         // Buffer empty – ask the API for the previous ID
         const currentId = state.viewerPhotoId;
-        apiJson(`/api/photo/${currentId}/prev?filter=${state.currentFilter}&sort=${state.currentSort}`)
+        let url = `/api/photo/${currentId}/prev?filter=${state.currentFilter}&sort=${state.currentSort}`;
+        if (state.focalLength !== null) {
+            url += `&focal_length=${state.focalLength}`;
+        }
+        if (state.portraitMode !== null) {
+            url += `&xiaomi_portrait=${state.portraitMode}`;
+        }
+        apiJson(url)
             .then(data => {
                 if (state.viewerPhotoId !== currentId) return;
                 const prevId = data.photo_id;
@@ -247,7 +260,14 @@ export function viewerNext() {
     } else {
         // Buffer empty – ask the API for the next ID
         const currentId = state.viewerPhotoId;
-        apiJson(`/api/photo/${currentId}/next?filter=${state.currentFilter}&sort=${state.currentSort}`)
+        let url = `/api/photo/${currentId}/next?filter=${state.currentFilter}&sort=${state.currentSort}`;
+        if (state.focalLength !== null) {
+            url += `&focal_length=${state.focalLength}`;
+        }
+        if (state.portraitMode !== null) {
+            url += `&xiaomi_portrait=${state.portraitMode}`;
+        }
+        apiJson(url)
             .then(data => {
                 if (state.viewerPhotoId !== currentId) return;
                 const nextId = data.photo_id;

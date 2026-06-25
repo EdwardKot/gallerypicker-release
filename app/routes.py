@@ -124,7 +124,9 @@ async def get_filters():
 async def get_photo(
     photo_id: str,
     filter: str = Query(None, pattern="^(all|liked|unliked)$"),
-    sort: str = Query(None, pattern="^(newest|oldest|name_asc|name_desc)$")
+    sort: str = Query(None, pattern="^(newest|oldest|name_asc|name_desc)$"),
+    focal_length: int = Query(None),
+    xiaomi_portrait: int = Query(None),
 ):
     db = await get_db()
     cursor = await db.execute(
@@ -151,7 +153,7 @@ async def get_photo(
     }
     
     if filter and sort:
-        where_clause, order_clause = _build_filter_sort_sql(filter, sort)
+        where_clause, order_clause = _build_filter_sort_sql(filter, sort, focal_length, xiaomi_portrait)
         query = f"""
             WITH ordered AS (
                 SELECT photo_id,
@@ -371,10 +373,12 @@ async def download_photo(photo_id: str):
 async def get_next_photo_id(
     photo_id: str,
     filter: str = Query("all", pattern="^(all|liked|unliked)$"),
-    sort: str = Query("newest", pattern="^(newest|oldest|name_asc|name_desc)$")
+    sort: str = Query("newest", pattern="^(newest|oldest|name_asc|name_desc)$"),
+    focal_length: int = Query(None),
+    xiaomi_portrait: int = Query(None),
 ):
     db = await get_db()
-    where_clause, order_clause = _build_filter_sort_sql(filter, sort)
+    where_clause, order_clause = _build_filter_sort_sql(filter, sort, focal_length, xiaomi_portrait)
     query = f"""
         WITH ordered AS (
             SELECT photo_id,
@@ -401,10 +405,12 @@ async def get_next_photo_id(
 async def get_prev_photo_id(
     photo_id: str,
     filter: str = Query("all", pattern="^(all|liked|unliked)$"),
-    sort: str = Query("newest", pattern="^(newest|oldest|name_asc|name_desc)$")
+    sort: str = Query("newest", pattern="^(newest|oldest|name_asc|name_desc)$"),
+    focal_length: int = Query(None),
+    xiaomi_portrait: int = Query(None),
 ):
     db = await get_db()
-    where_clause, order_clause = _build_filter_sort_sql(filter, sort)
+    where_clause, order_clause = _build_filter_sort_sql(filter, sort, focal_length, xiaomi_portrait)
     query = f"""
         WITH ordered AS (
             SELECT photo_id,
