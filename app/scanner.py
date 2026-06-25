@@ -32,28 +32,39 @@ def _extract_exif(abs_path: str) -> dict:
             exif_sub = exif.get_ifd(0x8769)
 
             # Standard tag: 35mm equivalent focal length
-            if exif_sub:
-                fl = exif_sub.get(_TAG_FOCAL_LENGTH_35MM)
-                if fl is not None:
-                    try:
-                        result["focal_length_35mm"] = int(fl)
-                    except (TypeError, ValueError):
-                        pass
-
-            # Xiaomi private tags — only attempt for Xiaomi bodies
-            make = (exif.get(_TAG_MAKE) or "").strip()
-            if make.lower() == "xiaomi" and exif_sub:
+            fl = exif_sub.get(_TAG_FOCAL_LENGTH_35MM) if exif_sub else None
+            if fl is None:
+                # Fallback to root IFD0 just in case
+                fl = exif.get(_TAG_FOCAL_LENGTH_35MM)
+            
+            if fl is not None:
                 try:
-                    maker_ifd = exif_sub.get_ifd(_TAG_MAKER_NOTE)
-                    if maker_ifd:
-                        portrait = maker_ifd.get(_TAG_XIAOMI_PORTRAIT)
-                        scene    = maker_ifd.get(_TAG_XIAOMI_SCENE)
-                        if portrait is not None:
+                    result["focal_length_35mm"] = int(fl)
+                except (TypeError, ValueError):
+                    pass
+
+            # Xiaomi private tags — only attempt for Xiaomi-family bodies
+            make = (exif.get(_TAG_MAKE) or "").strip().lower()
+            if exif_sub and ("xiaomi" in make or "redmi" in make or "poco" in make):
+                try:
+                    # Xiaomi portrait and scene tags are stored directly inside the Exif SubIFD (0x8769)
+                    # Pillow parses BYTE tags as bytes (e.g. b'\x02'), so we get the value via [0]
+                    portrait = exif_sub.get(_TAG_XIAOMI_PORTRAIT)
+                    scene    = exif_sub.get(_TAG_XIAOMI_SCENE)
+                    
+                    if portrait is not None:
+                        if isinstance(portrait, bytes) and len(portrait) > 0:
+                            result["xiaomi_portrait"] = int(portrait[0])
+                        elif isinstance(portrait, (int, float)):
                             result["xiaomi_portrait"] = int(portrait)
-                        if scene is not None:
+                            
+                    if scene is not None:
+                        if isinstance(scene, bytes) and len(scene) > 0:
+                            result["xiaomi_scene"] = int(scene[0])
+                        elif isinstance(scene, (int, float)):
                             result["xiaomi_scene"] = int(scene)
                 except Exception:
-                    pass  # MakerNote parse failure is non-fatal
+                    pass  # Non-fatal
 
     except Exception:
         pass  # Unreadable EXIF is non-fatal
