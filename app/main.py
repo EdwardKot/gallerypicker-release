@@ -1,24 +1,73 @@
 import os
+import random
+import socket
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, JSONResponse
+from starlette.middleware.base import BaseHTTPMiddleware
+import app.config as config
 from app.config import BASE_DIR, PHOTO_ROOT, HOST, PORT
 from app.database import get_db, close_db
 from app.scanner import scan_photos
 from app.routes import router
 
 
+def _get_local_ip() -> str:
+    """Best-effort LAN IP detection."""
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(("8.8.8.8", 80))
+        ip = s.getsockname()[0]
+        s.close()
+        return ip
+    except Exception:
+        return "YOUR_PHONE_IP"
+
+
+class PinAuthMiddleware(BaseHTTPMiddleware):
+    """Allow requests that carry a valid X-Gallery-Pin header.
+    The web UI stores the PIN in localStorage and sends it with every request.
+    Static assets (/static/*) and the root page itself are exempt so the
+    PIN dialog can always load.
+    """
+
+    EXEMPT_PREFIXES = ("/static/",)
+    EXEMPT_EXACT = ("/",)
+
+    async def dispatch(self, request: Request, call_next):
+        path = request.url.path
+
+        # Always allow exempt paths
+        if path in self.EXEMPT_EXACT:
+            return await call_next(request)
+        for prefix in self.EXEMPT_PREFIXES:
+            if path.startswith(prefix):
+                return await call_next(request)
+
+        # Check PIN header
+        pin = request.headers.get("X-Gallery-Pin", "")
+        if pin == config.ACCESS_PIN:
+            return await call_next(request)
+
+        return JSONResponse({"error": "Unauthorized"}, status_code=401)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # Generate or load PIN
+    config.ACCESS_PIN = os.environ.get("ACCESS_PIN") or f"{random.randint(0, 9999):04d}"
+    local_ip = _get_local_ip()
+
     # Startup
     print()
     print(f"{'='*60}")
     print(f"  Gallery Picker")
     print(f"{'='*60}")
     print(f"  Photo root : {os.path.expanduser(PHOTO_ROOT)}")
-    print(f"  Server     : http://{HOST}:{PORT}")
+    print(f"  Access URL : http://{local_ip}:{PORT}")
+    print(f"  访问密钥   : {config.ACCESS_PIN}")
     print(f"{'='*60}")
     print()
     print("  Stop        Ctrl+C")
@@ -45,6 +94,9 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="Gallery Picker", lifespan=lifespan)
+
+# PIN auth middleware
+app.add_middleware(PinAuthMiddleware)
 
 # Static files
 static_dir = os.path.join(BASE_DIR, "static")

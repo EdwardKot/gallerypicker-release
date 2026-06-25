@@ -4,8 +4,6 @@ A lightweight, browser-based photo culling tool that runs inside Android Termux.
 
 Designed for professional smartphone sample photographers who want to review large numbers of Android phone photos from a Mac browser, quickly mark selected photos, and download selected originals.
 
-> ⚠️ **Security Warning**: This application is intended for **trusted local network use only**. Do **NOT** expose this service directly to the public internet. There is no authentication or access control.
-
 ## Features
 
 - 📸 Browse thousands of photos via responsive thumbnail grid
@@ -15,16 +13,69 @@ Designed for professional smartphone sample photographers who want to review lar
 - 📅 Date-grouped thumbnails with per-date select-all checkbox
 - 📦 Download selected or liked originals
 - 🔄 Smart thumbnail caching (1024px long edge)
+- 🔒 4-digit PIN access control — browser remembers it via localStorage
 - 📱 Runs entirely inside Termux — no root, no Android Studio
 - 🖥️ Optimized for Mac desktop browser usage
 
+## Installation (one command)
+
+Open Termux and paste:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/EdwardKot/gallerypicker-release/main/bootstrap.sh | bash
+```
+
+This will:
+1. Install all system and Python dependencies
+2. Request Android storage permission (tap **Allow** when prompted)
+3. Clone the project
+4. Register a `gallery` shortcut command in your shell
+
+> ⚠️ **Do not** run `pip install --upgrade pip`. Termux manages its own Python environment and upgrading pip manually may break it.
+
+## Daily Usage
+
+After installation, just type in Termux:
+
+```bash
+gallery
+```
+
+A menu appears:
+
+```
+  ╔══════════════════════════════╗
+  ║       Gallery Picker         ║
+  ╚══════════════════════════════╝
+
+    1) 启动服务
+    2) 更新到最新版本
+    3) 退出
+```
+
+Choose **1** to start the server. The terminal will show:
+
+```
+============================================================
+  Gallery Picker
+============================================================
+  Photo root : /storage/emulated/0/DCIM/Camera
+  Access URL : http://192.168.1.157:8787
+  访问密钥   : 3847
+============================================================
+```
+
+Open the **Access URL** on any device on the same Wi-Fi. The browser will show a PIN dialog — enter the 4-digit code shown in the terminal. The browser remembers it via localStorage, so you only need to enter it once per device.
+
+Stop the server with `Ctrl+C`, then press any key to return to the menu.
+
 ## Workflow
 
-1. Start the server on your Android phone (in Termux)
-2. Open `http://PHONE_IP:8787` from your Mac browser
-3. Browse the thumbnail grid — scroll infinitely through all photos
+1. Start the server (`gallery` → 1)
+2. Open the Access URL from your Mac browser, enter the PIN once
+3. Browse the thumbnail grid
 4. **Click** to focus a photo, **Double-click** to open viewer
-5. Use keyboard shortcuts:
+5. Keyboard shortcuts:
    - `←` `→` `↑` `↓` — Navigate grid
    - `Space` — Open/close viewer
    - `1` — Like photo
@@ -32,162 +83,29 @@ Designed for professional smartphone sample photographers who want to review lar
    - `D` — Download current photo (viewer)
    - `2` / `O` — Load original resolution (viewer)
    - `Esc` / `Space` — Close viewer
-6. Filter by All / Liked / Unliked photos
-7. Select photos with click (or Shift+Click for range), then download selected
+6. Filter by All / Liked photos
+7. Select photos with click (Shift+Click for range), then download
 
-## Termux Quick Start
+## Security
 
-### 1. Install Termux dependencies
+- A random 4-digit PIN is generated each time the server starts
+- The PIN is shown in the Termux terminal and must be entered once per browser
+- Once entered correctly, the browser stores it in localStorage — no need to re-enter
+- To use a fixed PIN across restarts, set the `ACCESS_PIN` environment variable in `run.sh`
+- Intended for **trusted local network use only** — do not expose to the public internet
 
-```bash
-pkg update -y
-pkg install python git rust binutils unzip zip -y
-termux-setup-storage
-```
-
-When Android asks for storage permission, allow it.
-
-> ⚠️ **Do not** run `pip install --upgrade pip`. Termux manages its own Python/pip packages, and upgrading pip manually may break the Termux Python environment.
-
-### 2. Clone the project
-
-```bash
-cd ~
-git clone https://github.com/EdwardKot/gallerypicker-release.git gallerypicker
-cd ~/gallerypicker
-```
-
-> Do not use a manually unzipped ZIP folder if you want to update with `git pull`.
-
-### 3. Install Python dependencies
-
-```bash
-pip install -r requirements.txt
-```
-
-If this fails on `pydantic-core`, install Rust support first:
-
-```bash
-pkg install rust binutils -y
-pip install -r requirements.txt
-```
-
-### 4. Create run.sh (recommended)
-
-```bash
-cat > ~/gallerypicker/run.sh << 'EOF'
-#!/data/data/com.termux/files/usr/bin/bash
-cd "$(dirname "$0")"
-mkdir -p data cache
-export PHOTO_ROOT=/storage/emulated/0/DCIM/Camera
-export DATABASE_PATH="$PWD/data/gallery.db"
-export CACHE_DIR="$PWD/cache"
-python -m uvicorn app.main:app --host 0.0.0.0 --port 8787
-EOF
-chmod +x ~/gallerypicker/run.sh
-```
-
-### 5. Create update.sh (recommended)
-
-```bash
-cat > ~/gallerypicker/update.sh << 'EOF'
-#!/data/data/com.termux/files/usr/bin/bash
-set -e
-cd "$(dirname "$0")"
-git pull
-pip install -r requirements.txt
-mkdir -p data cache
-echo "Update complete. Run with: ./run.sh"
-EOF
-chmod +x ~/gallerypicker/update.sh
-```
-
-### 6. Start
+## Manual Usage (without menu)
 
 ```bash
 cd ~/gallerypicker
-./run.sh
-```
-
-When it works, you should see:
-
-```
-============================================================
-  Gallery Picker
-============================================================
-  Photo root : /storage/emulated/0/DCIM/Camera
-  Server     : http://0.0.0.0:8787
-============================================================
-
-  Stop        Ctrl+C
-  Restart     ./run.sh
-  Update      ./update.sh
-```
-
-### 7. Open in browser
-
-On the phone:
-
-```
-http://127.0.0.1:8787
-```
-
-From a Mac or another device on the same Wi-Fi, first check the phone IP:
-
-```bash
-ip addr show wlan0
-```
-
-Then open:
-
-```
-http://PHONE_IP:8787
-```
-
-Example:
-
-```
-http://192.168.1.157:8787
-```
-
-## Daily Usage
-
-After first-time setup, you only need these three commands:
-
-```bash
-cd ~/gallerypicker
-
 ./run.sh        # Start
 ./update.sh     # Update to latest version
-Ctrl+C          # Stop (in the Termux terminal running the server)
-```
-
-All three are also shown in the terminal every time the server starts.
-
-### If not using run.sh / update.sh
-
-Start manually:
-
-```bash
-cd ~/gallerypicker
-mkdir -p data cache
-export PHOTO_ROOT=/storage/emulated/0/DCIM/Camera
-export DATABASE_PATH=$PWD/data/gallery.db
-export CACHE_DIR=$PWD/cache
-python -m uvicorn app.main:app --host 0.0.0.0 --port 8787
-```
-
-Update manually:
-
-```bash
-cd ~/gallerypicker
-git pull
-pip install -r requirements.txt
+Ctrl+C          # Stop
 ```
 
 ## Configuration
 
-Set environment variables before running:
+Set environment variables in `run.sh` or export them before running:
 
 | Variable | Default | Description |
 |---|---|---|
@@ -197,12 +115,7 @@ Set environment variables before running:
 | `THUMBNAIL_SIZE` | `1024` | Thumbnail long edge in pixels |
 | `DATABASE_PATH` | `./data/gallery.db` | SQLite database path |
 | `CACHE_DIR` | `./cache/thumbnails` | Thumbnail cache directory |
-
-Example with custom photo root:
-
-```bash
-PHOTO_ROOT=/storage/emulated/0/Pictures python -m uvicorn app.main:app --host 0.0.0.0 --port 8787
-```
+| `ACCESS_PIN` | *(random 4-digit)* | Fixed PIN to use across restarts |
 
 ## API Endpoints
 
@@ -226,25 +139,26 @@ PHOTO_ROOT=/storage/emulated/0/Pictures python -m uvicorn app.main:app --host 0.
 ```
 gallerypicker/
   app/
-    __init__.py
-    main.py          # FastAPI app entry point
-    config.py        # Configuration
+    main.py          # FastAPI app, PIN auth middleware, startup banner
+    config.py        # Configuration + ACCESS_PIN
     database.py      # SQLite setup
     scanner.py       # Photo directory scanner
     thumbnails.py    # Thumbnail generation
     routes.py        # API routes
     utils.py         # Utility functions
   templates/
-    index.html       # Web UI template
+    index.html       # Web UI (includes PIN dialog)
   static/
-    app.js           # Frontend JavaScript
+    app.js           # Frontend JS (PIN auth, API wrapper)
     style.css        # Styles
   data/
     gallery.db       # SQLite database (auto-created)
   cache/
     thumbnails/      # Thumbnail cache (auto-created)
-  run.sh             # One-click start script
-  update.sh          # One-click update script
+  bootstrap.sh       # One-command installer
+  menu.sh            # TUI launcher menu
+  run.sh             # Direct start script
+  update.sh          # Update script
   requirements.txt
   README.md
 ```
@@ -271,9 +185,11 @@ The first scan indexes all photos and generates thumbnails on demand. Subsequent
 
 ### Can't connect from Mac
 - Ensure both devices are on the same Wi-Fi network
-- Check the phone IP with `ip addr show wlan0`
-- Verify the port is 8787 (or whatever you configured)
+- The Access URL is printed in the terminal when the server starts
 - Some networks isolate devices — try a mobile hotspot if needed
+
+### PIN not working
+The PIN changes every time the server restarts. Check the current PIN in the Termux terminal. To use a fixed PIN, set `ACCESS_PIN=1234` in `run.sh`.
 
 ## License
 

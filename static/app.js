@@ -66,10 +66,53 @@
     const $downloadFilename = document.getElementById('download-filename');
     const $downloadProgressFill = document.getElementById('download-progress-fill');
 
+    // ── PIN Auth ─────────────────────────────────────────────
+
+    const PIN_KEY = 'gallery_pin';
+
+    function getPin() {
+        return localStorage.getItem(PIN_KEY) || '';
+    }
+
+    function savePin(pin) {
+        localStorage.setItem(PIN_KEY, pin);
+    }
+
+    function showPinDialog(errorMsg) {
+        const overlay = document.getElementById('pin-overlay');
+        const input = document.getElementById('pin-input');
+        const err = document.getElementById('pin-error');
+        const btn = document.getElementById('pin-submit');
+
+        err.textContent = errorMsg || '';
+        overlay.style.display = 'flex';
+        input.value = '';
+        input.focus();
+
+        function attempt() {
+            const pin = input.value.trim();
+            if (!pin) return;
+            savePin(pin);
+            overlay.style.display = 'none';
+            // retry initialisation
+            initApp();
+        }
+
+        btn.onclick = attempt;
+        input.onkeydown = e => { if (e.key === 'Enter') attempt(); };
+    }
+
     // ── Helpers ──────────────────────────────────────────────
 
-    function api(path, opts) {
+    function api(path, opts = {}) {
+        opts.headers = Object.assign({}, opts.headers, {
+            'X-Gallery-Pin': getPin()
+        });
         return fetch(path, opts).then(r => {
+            if (r.status === 401) {
+                showPinDialog('密钥错误，请重试');
+                throw new Error('Unauthorized');
+            }
             if (!r.ok) throw new Error(`API ${r.status}`);
             return r;
         });
@@ -1270,25 +1313,35 @@
 
     // ── Init ─────────────────────────────────────────────────
 
-    async function init() {
+    async function initApp() {
         applyThumbSize();
         // Restore preview size setting
         if ($settingsPreviewSize) {
             const saved = String(state.previewSize);
             $settingsPreviewSize.value = saved === '0' ? '0' : state.previewSize.toString();
         }
+
+        // If no PIN stored yet, show dialog immediately before any API call
+        if (!getPin()) {
+            showPinDialog();
+            return;
+        }
+
         setLoading(true);
         try {
             await fetchCounts();
             await fetchPhotos();
             await refreshLikedIdsCache();
         } catch (e) {
-            console.error('init', e);
-            showToast('Failed to initialize');
+            // 401 is handled inside api(), other errors show toast
+            if (e.message !== 'Unauthorized') {
+                console.error('initApp', e);
+                showToast('Failed to initialize');
+            }
         }
     }
 
-    init();
+    initApp();
 
     // ── Settings panel ──────────────────────────────────────
 

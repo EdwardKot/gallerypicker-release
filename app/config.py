@@ -26,3 +26,7 @@ SUPPORTED_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp", ".heic", ".heif"}
 # Pagination
 DEFAULT_PAGE_SIZE = 100
 MAX_PAGE_SIZE = 500
+
+# Access PIN (4-digit numeric, auto-generated at startup if not set via env)
+# Set ACCESS_PIN env var to use a fixed PIN across restarts
+ACCESS_PIN: str = ""  # populated by main.py at startup
