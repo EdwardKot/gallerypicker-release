@@ -54,10 +54,35 @@ class PinAuthMiddleware(BaseHTTPMiddleware):
         return JSONResponse({"error": "Unauthorized"}, status_code=401)
 
 
+def _load_or_create_pin() -> str:
+    """Load a persistent PIN from data/pin.txt, or generate and save one."""
+    env_pin = os.environ.get("ACCESS_PIN")
+    if env_pin:
+        return env_pin
+
+    pin_path = os.path.join(config.BASE_DIR, "data", "pin.txt")
+    os.makedirs(os.path.dirname(pin_path), exist_ok=True)
+
+    # Try to read existing PIN
+    try:
+        with open(pin_path, "r") as f:
+            pin = f.read().strip()
+            if pin:
+                return pin
+    except FileNotFoundError:
+        pass
+
+    # Generate new PIN and persist it
+    pin = f"{random.randint(0, 9999):04d}"
+    with open(pin_path, "w") as f:
+        f.write(pin)
+    return pin
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Generate or load PIN
-    config.ACCESS_PIN = os.environ.get("ACCESS_PIN") or f"{random.randint(0, 9999):04d}"
+    # Load or generate persistent PIN
+    config.ACCESS_PIN = _load_or_create_pin()
     local_ip = _get_local_ip()
 
     # Startup
