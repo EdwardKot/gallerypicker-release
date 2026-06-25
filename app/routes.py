@@ -47,11 +47,17 @@ async def list_photos(
     filter: str = Query("all", pattern="^(all|liked|unliked)$"),
     sort: str = Query("newest", pattern="^(newest|oldest|name_asc|name_desc)$"),
     page: int = Query(1, ge=1),
-    page_size: int = Query(DEFAULT_PAGE_SIZE, ge=1, le=MAX_PAGE_SIZE),
+    page_size: int = Query(DEFAULT_PAGE_SIZE, ge=1),
     focal_length: int = Query(None),
     xiaomi_portrait: int = Query(None),
 ):
     db = await get_db()
+
+    # Cap page_size to MAX_PAGE_SIZE unless filter is 'liked' (which needs to fetch all liked photo IDs)
+    if filter != "liked":
+        page_size = min(page_size, MAX_PAGE_SIZE)
+    else:
+        page_size = min(page_size, 100000)
 
     where, order = _build_filter_sort_sql(filter, sort, focal_length, xiaomi_portrait)
     params = []
