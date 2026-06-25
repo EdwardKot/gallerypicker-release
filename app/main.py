@@ -49,7 +49,13 @@ class PinAuthMiddleware(BaseHTTPMiddleware):
         # Check PIN — header (API calls) or cookie (img src / direct browser loads)
         pin = request.headers.get("X-Gallery-Pin", "") or request.cookies.get("gallery_pin", "")
         if pin == config.ACCESS_PIN:
-            return await call_next(request)
+            response = await call_next(request)
+            # Add cache headers for dynamic API calls to prevent iOS Safari from serving stale data
+            if path.startswith("/api/") and not any(p in path for p in ("/api/thumbnail/", "/api/original/", "/api/download/")):
+                response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+                response.headers["Pragma"] = "no-cache"
+                response.headers["Expires"] = "0"
+            return response
 
         return JSONResponse({"error": "Unauthorized"}, status_code=401)
 

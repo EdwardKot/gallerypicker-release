@@ -136,7 +136,9 @@
             return Promise.reject(new Error('Unauthorized'));
         }
         opts.headers = Object.assign({}, opts.headers, {
-            'X-Gallery-Pin': getPin()
+            'X-Gallery-Pin': getPin(),
+            'Cache-Control': 'no-cache',
+            'Pragma': 'no-cache'
         });
         return fetch(path, opts).then(r => {
             if (r.status === 401) {
@@ -1863,4 +1865,107 @@
 
     window.addEventListener('resize', relocateDOM);
     relocateDOM();
+
+    // ── Pull to Refresh (Touch Devices) ─────────────────────
+    let ptrStartY = 0;
+    let ptrPulling = false;
+    const PTR_THRESHOLD = 70;
+    const $ptr = document.getElementById('pull-to-refresh');
+
+    function handleTouchStart(e) {
+        if (!state.isTouch || window.scrollY > 0 || state.viewerActive) return;
+        ptrStartY = e.touches[0].pageY;
+        ptrPulling = true;
+    }
+
+    function handleTouchMove(e) {
+        if (!ptrPulling) return;
+        const currentY = e.touches[0].pageY;
+        const diffY = currentY - ptrStartY;
+
+        if (diffY > 0) {
+            // Apply rubber-band effect
+            const y = Math.pow(diffY, 0.82);
+            if (y > 0) {
+                // Prevent default scrolling so Safari bounce doesn't compete
+                if (e.cancelable) e.preventDefault();
+                
+                document.body.style.transition = 'none';
+                document.body.style.transform = `translateY(${y}px)`;
+
+                if ($ptr) {
+                    $ptr.style.opacity = '1';
+                    $ptr.classList.add('ptr-pulling');
+                    if (y >= PTR_THRESHOLD) {
+                        $ptr.classList.add('ptr-release');
+                        $ptr.querySelector('.ptr-text').textContent = '释放以刷新';
+                    } else {
+                        $ptr.classList.remove('ptr-release');
+                        $ptr.querySelector('.ptr-text').textContent = '下拉刷新';
+                    }
+                }
+            }
+        } else {
+            // If dragging upwards, cancel pulling
+            ptrPulling = false;
+            document.body.style.transition = 'transform 0.2s ease';
+            document.body.style.transform = 'translateY(0)';
+            if ($ptr) {
+                $ptr.classList.remove('ptr-pulling');
+                $ptr.style.opacity = '0';
+            }
+        }
+    }
+
+    async function handleTouchEnd() {
+        if (!ptrPulling) return;
+        ptrPulling = false;
+
+        // Retrieve current transform value
+        const transform = document.body.style.transform;
+        const match = transform.match(/translateY\((\d+\.?\d*)px\)/);
+        const y = match ? parseFloat(match[1]) : 0;
+
+        document.body.style.transition = 'transform 0.3s cubic-bezier(0.16, 1, 0.3, 1)';
+
+        if (y >= PTR_THRESHOLD) {
+            document.body.style.transform = `translateY(${PTR_THRESHOLD}px)`;
+            if ($ptr) {
+                $ptr.classList.remove('ptr-release');
+                $ptr.classList.add('ptr-refreshing');
+                $ptr.querySelector('.ptr-text').textContent = '正在刷新...';
+            }
+
+            try {
+                // Call the rescan API
+                await apiJson('/api/rescan', { method: 'POST' });
+                await fetchCounts();
+                await fetchFilters();
+                await fetchPhotos();
+                showToast('扫描完成，图库已更新 ✓');
+            } catch (e) {
+                console.error('Pull to refresh rescan failed', e);
+                showToast('刷新失败，请重试');
+            } finally {
+                document.body.style.transform = 'translateY(0)';
+                if ($ptr) {
+                    $ptr.classList.remove('ptr-refreshing');
+                    $ptr.classList.remove('ptr-pulling');
+                    setTimeout(() => {
+                        $ptr.style.opacity = '0';
+                    }, 300);
+                }
+            }
+        } else {
+            document.body.style.transform = 'translateY(0)';
+            if ($ptr) {
+                $ptr.classList.remove('ptr-pulling');
+                $ptr.style.opacity = '0';
+            }
+        }
+    }
+
+    document.addEventListener('touchstart', handleTouchStart, { passive: true });
+    document.addEventListener('touchmove', handleTouchMove, { passive: false });
+    document.addEventListener('touchend', handleTouchEnd, { passive: true });
 })();
