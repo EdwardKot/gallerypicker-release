@@ -11,8 +11,15 @@ from app.scanner import scan_photos
 from app.thumbnails import generate_thumbnail, get_cache_stats, clear_cache
 from app.config import PHOTO_ROOT, DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE
 from app.queries import PhotoFilters, build_filter_sort_sql
+from typing import Optional
 
 router = APIRouter()
+
+
+def parse_vendor_tag(vendor_tag: Optional[str]) -> Optional[int]:
+    if vendor_tag in ("xiaomi_portrait=0", "xiaomi_portrait=2", "xiaomi_portrait=3"):
+        return int(vendor_tag.split("=")[1])
+    return None
 
 
 @router.get("/api/photos")
@@ -23,8 +30,12 @@ async def list_photos(
     page_size: int = Query(DEFAULT_PAGE_SIZE, ge=1),
     focal_length: int = Query(None),
     xiaomi_portrait: int = Query(None),
+    vendor_tag: str = Query(None),
 ):
     db = await get_db()
+
+    if vendor_tag and xiaomi_portrait is None:
+        xiaomi_portrait = parse_vendor_tag(vendor_tag)
 
     # Cap page_size to MAX_PAGE_SIZE unless filter is 'liked' (which needs to fetch all liked photo IDs)
     if filter != "liked":
@@ -92,9 +103,18 @@ async def get_filters():
     )
     xiaomi_count = (await cursor.fetchone())[0]
 
+    available_vendor_tags = []
+    if xiaomi_count > 0:
+        available_vendor_tags = [
+            {"id": "xiaomi_portrait=0", "display_name": "All Portrait (人像模式)", "vendor": "Xiaomi"},
+            {"id": "xiaomi_portrait=2", "display_name": "Master Portrait (大师人像)", "vendor": "Xiaomi"},
+            {"id": "xiaomi_portrait=3", "display_name": "Leica Portrait (徕卡人像)", "vendor": "Xiaomi"}
+        ]
+
     return {
         "focal_lengths": focal_lengths,
         "has_xiaomi_portrait": xiaomi_count > 0,
+        "available_vendor_tags": available_vendor_tags,
     }
 
 
@@ -105,8 +125,13 @@ async def get_photo(
     sort: str = Query(None, pattern="^(newest|oldest|name_asc|name_desc)$"),
     focal_length: int = Query(None),
     xiaomi_portrait: int = Query(None),
+    vendor_tag: str = Query(None),
 ):
     db = await get_db()
+
+    if vendor_tag and xiaomi_portrait is None:
+        xiaomi_portrait = parse_vendor_tag(vendor_tag)
+
     cursor = await db.execute(
         """SELECT photo_id, relative_path, absolute_path, file_size, mtime,
                   width, height, liked
@@ -313,7 +338,9 @@ async def rescan():
 
 @router.get("/api/auth/verify")
 async def verify_auth():
-    return {"status": "ok"}
+    from app.utils import get_device_name
+    return {"status": "ok", "device_name": get_device_name()}
+
 
 
 @router.get("/api/events")
@@ -386,8 +413,13 @@ async def get_next_photo_id(
     sort: str = Query("newest", pattern="^(newest|oldest|name_asc|name_desc)$"),
     focal_length: int = Query(None),
     xiaomi_portrait: int = Query(None),
+    vendor_tag: str = Query(None),
 ):
     db = await get_db()
+
+    if vendor_tag and xiaomi_portrait is None:
+        xiaomi_portrait = parse_vendor_tag(vendor_tag)
+
     where_clause, order_clause = build_filter_sort_sql(PhotoFilters(
         filter_str=filter,
         sort_str=sort,
@@ -423,8 +455,13 @@ async def get_prev_photo_id(
     sort: str = Query("newest", pattern="^(newest|oldest|name_asc|name_desc)$"),
     focal_length: int = Query(None),
     xiaomi_portrait: int = Query(None),
+    vendor_tag: str = Query(None),
 ):
     db = await get_db()
+
+    if vendor_tag and xiaomi_portrait is None:
+        xiaomi_portrait = parse_vendor_tag(vendor_tag)
+
     where_clause, order_clause = build_filter_sort_sql(PhotoFilters(
         filter_str=filter,
         sort_str=sort,

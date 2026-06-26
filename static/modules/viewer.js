@@ -45,8 +45,8 @@ export function openViewer(photoId) {
         if (idx !== -1) {
             state.viewerIndex = idx;
             state.totalPhotos = cards.length;
-            state.viewerPrevIds = idx > 0 ? cards.slice(Math.max(0, idx - 3), idx).map(c => c.dataset.photoId).reverse() : [];
-            state.viewerNextIds = idx < cards.length - 1 ? cards.slice(idx + 1, Math.min(cards.length, idx + 4)).map(c => c.dataset.photoId) : [];
+            state.viewerPrevIds = idx > 0 ? cards.slice(Math.max(0, idx - 4), idx).map(c => c.dataset.photoId).reverse() : [];
+            state.viewerNextIds = idx < cards.length - 1 ? cards.slice(idx + 1, Math.min(cards.length, idx + 5)).map(c => c.dataset.photoId) : [];
             const $viewerPosition = document.getElementById('viewer-position');
             if ($viewerPosition) $viewerPosition.textContent = `${idx + 1} / ${cards.length}`;
         }
@@ -204,7 +204,10 @@ export function preloadNearbyList(prevIds, nextIds) {
     const toPreload = [];
     if (nextIds && nextIds.length > 0) toPreload.push(nextIds[0]);
     if (nextIds && nextIds.length > 1) toPreload.push(nextIds[1]);
+    if (nextIds && nextIds.length > 2) toPreload.push(nextIds[2]);
     if (prevIds && prevIds.length > 0) toPreload.push(prevIds[0]);
+    if (prevIds && prevIds.length > 1) toPreload.push(prevIds[1]);
+    if (prevIds && prevIds.length > 2) toPreload.push(prevIds[2]);
     toPreload.forEach(id => {
         if (id) { const img = new Image(); img.src = `/api/thumbnail/${id}`; }
     });
@@ -288,16 +291,16 @@ export function extendViewerNavFromGrid() {
     const cards = Array.from($grid.querySelectorAll('.thumb-card'));
     const idx = state.viewerIndex;
     if (idx < 0 || idx >= cards.length) return;
-    if (state.viewerNextIds.length < 2) {
+    if (state.viewerNextIds.length < 3) {
         const start = idx + 1 + state.viewerNextIds.length;
-        const end = Math.min(cards.length, start + 3);
+        const end = Math.min(cards.length, start + 4);
         for (let i = start; i < end; i++) {
             state.viewerNextIds.push(cards[i].dataset.photoId);
         }
     }
-    if (state.viewerPrevIds.length < 2) {
+    if (state.viewerPrevIds.length < 3) {
         const end = idx - state.viewerPrevIds.length;
-        const start = Math.max(0, end - 3);
+        const start = Math.max(0, end - 4);
         for (let i = end - 1; i >= start; i--) {
             state.viewerPrevIds.push(cards[i].dataset.photoId);
         }
