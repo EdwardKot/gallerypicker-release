@@ -10,38 +10,9 @@ from app.events import announcer
 from app.scanner import scan_photos
 from app.thumbnails import generate_thumbnail, get_cache_stats, clear_cache
 from app.config import PHOTO_ROOT, DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE
+from app.queries import PhotoFilters, build_filter_sort_sql
 
 router = APIRouter()
-
-
-def _build_filter_sort_sql(filter_str: str, sort_str: str,
-                            focal_length: int = None, xiaomi_portrait: int = None):
-    conditions = []
-    if filter_str == "liked":
-        conditions.append("liked = 1")
-    elif filter_str == "unliked":
-        conditions.append("liked = 0")
-
-    if focal_length is not None:
-        conditions.append(f"focal_length_35mm = {int(focal_length)}")
-
-    if xiaomi_portrait is not None:
-        if xiaomi_portrait == 0:
-            # 0 = all portrait modes (2 or 3)
-            conditions.append("xiaomi_portrait IN (2, 3)")
-        else:
-            conditions.append(f"xiaomi_portrait = {int(xiaomi_portrait)}")
-
-    where_clause = (" WHERE " + " AND ".join(conditions)) if conditions else ""
-
-    sort_map = {
-        "newest": "mtime DESC, photo_id DESC",
-        "oldest": "mtime ASC, photo_id ASC",
-        "name_asc": "relative_path ASC, photo_id ASC",
-        "name_desc": "relative_path DESC, photo_id DESC"
-    }
-    order_clause = f" ORDER BY {sort_map.get(sort_str, 'mtime DESC, photo_id DESC')}"
-    return where_clause, order_clause
 
 
 @router.get("/api/photos")
@@ -61,7 +32,7 @@ async def list_photos(
     else:
         page_size = min(page_size, 100000)
 
-    where, order = _build_filter_sort_sql(filter, sort, focal_length, xiaomi_portrait)
+    where, order = build_filter_sort_sql(PhotoFilters(filter, sort, focal_length, xiaomi_portrait))
     params = []
 
     count_query = f"SELECT COUNT(*) FROM photos{where}"
@@ -155,7 +126,7 @@ async def get_photo(
     }
     
     if filter and sort:
-        where_clause, order_clause = _build_filter_sort_sql(filter, sort, focal_length, xiaomi_portrait)
+        where_clause, order_clause = build_filter_sort_sql(PhotoFilters(filter, sort, focal_length, xiaomi_portrait))
         query = f"""
             WITH ordered AS (
                 SELECT photo_id,
@@ -407,7 +378,7 @@ async def get_next_photo_id(
     xiaomi_portrait: int = Query(None),
 ):
     db = await get_db()
-    where_clause, order_clause = _build_filter_sort_sql(filter, sort, focal_length, xiaomi_portrait)
+    where_clause, order_clause = build_filter_sort_sql(PhotoFilters(filter, sort, focal_length, xiaomi_portrait))
     query = f"""
         WITH ordered AS (
             SELECT photo_id,
@@ -439,7 +410,7 @@ async def get_prev_photo_id(
     xiaomi_portrait: int = Query(None),
 ):
     db = await get_db()
-    where_clause, order_clause = _build_filter_sort_sql(filter, sort, focal_length, xiaomi_portrait)
+    where_clause, order_clause = build_filter_sort_sql(PhotoFilters(filter, sort, focal_length, xiaomi_portrait))
     query = f"""
         WITH ordered AS (
             SELECT photo_id,
