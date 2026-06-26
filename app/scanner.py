@@ -283,7 +283,7 @@ async def scan_photos(photo_root: str = None, db=None) -> dict:
 
     await db.commit()
 
-    return {
+    res = {
         "photo_root":  root,
         "scanned":     fs_result["scanned"],
         "new":         fs_result["new"],
@@ -291,3 +291,6 @@ async def scan_photos(photo_root: str = None, db=None) -> dict:
         "removed":     removed_count,
         "total_in_db": fs_result["scanned"],
     }
+    from app.events import announcer
+    announcer.announce("library_updated")
+    return res

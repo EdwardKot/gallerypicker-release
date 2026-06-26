@@ -3,8 +3,10 @@ import asyncio
 import mimetypes
 from datetime import datetime, timezone
 from fastapi import APIRouter, Query, HTTPException
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
+import json
 from app.database import get_db
+from app.events import announcer
 from app.scanner import scan_photos
 from app.thumbnails import generate_thumbnail, get_cache_stats, clear_cache
 from app.config import PHOTO_ROOT, DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE
@@ -281,6 +283,7 @@ async def like_photo(photo_id: str):
         (now, photo_id)
     )
     await db.commit()
+    announcer.announce("photo_updated", {"photo_id": photo_id, "liked": True})
     return {"photo_id": photo_id, "liked": True}
 
 
@@ -297,6 +300,7 @@ async def unlike_photo(photo_id: str):
         (now, photo_id)
     )
     await db.commit()
+    announcer.announce("photo_updated", {"photo_id": photo_id, "liked": False})
     return {"photo_id": photo_id, "liked": False}
 
 
@@ -322,7 +326,32 @@ async def get_counts():
 @router.post("/api/rescan")
 async def rescan():
     result = await scan_photos()
+    announcer.announce("library_updated")
     return result
+
+
+@router.get("/api/auth/verify")
+async def verify_auth():
+    return {"status": "ok"}
+
+
+@router.get("/api/events")
+async def events_endpoint():
+    async def event_generator():
+        q = announcer.listen()
+        try:
+            # Send initial ping to establish connection
+            yield "data: {\"event\": \"connected\"}\n\n"
+            while True:
+                try:
+                    event = await asyncio.wait_for(q.get(), timeout=15.0)
+                    yield f"data: {json.dumps(event)}\n\n"
+                except asyncio.TimeoutError:
+                    yield "data: {\"event\": \"ping\"}\n\n"
+        finally:
+            announcer.disconnect(q)
+
+    return StreamingResponse(event_generator(), media_type="text/event-stream")
 
 
 @router.get("/api/cache/stats")
