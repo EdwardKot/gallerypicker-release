@@ -32,7 +32,12 @@ async def list_photos(
     else:
         page_size = min(page_size, 100000)
 
-    where, order = build_filter_sort_sql(PhotoFilters(filter, sort, focal_length, xiaomi_portrait))
+    where, order = build_filter_sort_sql(PhotoFilters(
+        filter_str=filter,
+        sort_str=sort,
+        focal_length=focal_length,
+        xiaomi_portrait=xiaomi_portrait
+    ))
     params = []
 
     count_query = f"SELECT COUNT(*) FROM photos{where}"
@@ -126,7 +131,12 @@ async def get_photo(
     }
     
     if filter and sort:
-        where_clause, order_clause = build_filter_sort_sql(PhotoFilters(filter, sort, focal_length, xiaomi_portrait))
+        where_clause, order_clause = build_filter_sort_sql(PhotoFilters(
+            filter_str=filter,
+            sort_str=sort,
+            focal_length=focal_length,
+            xiaomi_portrait=xiaomi_portrait
+        ))
         query = f"""
             WITH ordered AS (
                 SELECT photo_id,
@@ -378,7 +388,12 @@ async def get_next_photo_id(
     xiaomi_portrait: int = Query(None),
 ):
     db = await get_db()
-    where_clause, order_clause = build_filter_sort_sql(PhotoFilters(filter, sort, focal_length, xiaomi_portrait))
+    where_clause, order_clause = build_filter_sort_sql(PhotoFilters(
+        filter_str=filter,
+        sort_str=sort,
+        focal_length=focal_length,
+        xiaomi_portrait=xiaomi_portrait
+    ))
     query = f"""
         WITH ordered AS (
             SELECT photo_id,
@@ -410,7 +425,12 @@ async def get_prev_photo_id(
     xiaomi_portrait: int = Query(None),
 ):
     db = await get_db()
-    where_clause, order_clause = build_filter_sort_sql(PhotoFilters(filter, sort, focal_length, xiaomi_portrait))
+    where_clause, order_clause = build_filter_sort_sql(PhotoFilters(
+        filter_str=filter,
+        sort_str=sort,
+        focal_length=focal_length,
+        xiaomi_portrait=xiaomi_portrait
+    ))
     query = f"""
         WITH ordered AS (
             SELECT photo_id,
