@@ -44,6 +44,8 @@ def build_filter_sort_sql(f: PhotoFilters) -> tuple[str, str]:
         conditions.append("liked = 1")
     elif f.filter_str == "unliked":
         conditions.append("liked = 0")
+    elif f.filter_str == "system_favorite":
+        conditions.append("system_favorite = 1")
 
     if f.focal_length is not None:
         conditions.append(f"focal_length_35mm = {int(f.focal_length)}")

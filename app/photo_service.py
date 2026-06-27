@@ -2,7 +2,7 @@ import os
 from datetime import datetime, timezone
 from typing import Optional
 
-from app.config import MAX_PAGE_SIZE
+from app.config import MAX_PAGE_SIZE, ENABLE_SYSTEM_FAVORITES
 from app.queries import PhotoFilters, build_filter_sort_sql
 
 
@@ -237,14 +237,17 @@ async def get_photo_counts(db) -> dict:
     cursor = await db.execute("""
         SELECT
             COUNT(*) AS total,
-            COALESCE(SUM(CASE WHEN liked = 1 THEN 1 ELSE 0 END), 0) AS liked
+            COALESCE(SUM(CASE WHEN liked = 1 THEN 1 ELSE 0 END), 0) AS liked,
+            COALESCE(SUM(CASE WHEN system_favorite = 1 THEN 1 ELSE 0 END), 0) AS system_favorite
         FROM photos
     """)
-    total, liked = await cursor.fetchone()
+    total, liked, system_favorite = await cursor.fetchone()
     return {
         "total": total,
         "liked": liked,
         "unliked": total - liked,
+        "system_favorite": system_favorite,
+        "has_system_favorites": ENABLE_SYSTEM_FAVORITES,
     }
 
 

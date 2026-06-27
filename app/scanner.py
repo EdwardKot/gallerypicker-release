@@ -3,7 +3,7 @@ import os
 import time
 from datetime import datetime, timezone
 from pathlib import Path
-from app.config import PHOTO_ROOT, SUPPORTED_EXTENSIONS
+from app.config import PHOTO_ROOT, SUPPORTED_EXTENSIONS, ENABLE_SYSTEM_FAVORITES
 from app.utils import compute_photo_id
 from app.database import get_db
 
@@ -17,6 +17,51 @@ _TAG_XIAOMI_SCENE      = 0x8889
 
 # Scanner rules version (increment when EXIF extraction rules change to force re-scanning of metadata)
 CURRENT_SCANNER_VERSION = 2
+
+
+def get_system_favorites() -> set:
+    """Query system favorites from Android.
+    Returns a set of absolute file paths representing favorited photos.
+    """
+    if not ENABLE_SYSTEM_FAVORITES:
+        return set()
+
+    import subprocess
+    import shutil
+    
+    # Locate the content tool
+    content_cmd = shutil.which("content")
+    if not content_cmd:
+        return set()
+
+    try:
+        # Run direct subprocess call to content query
+        args = [
+            content_cmd, "query",
+            "--uri", "content://media/external/file",
+            "--projection", "_data",
+            "--where", "is_favorite=1"
+        ]
+        res = subprocess.run(args, capture_output=True, text=True, timeout=10)
+        if res.returncode != 0 or not res.stdout:
+            return set()
+
+        favorites = set()
+        for line in res.stdout.splitlines():
+            line = line.strip()
+            if not line.startswith("Row:"):
+                continue
+            idx = line.find("_data=")
+            if idx != -1:
+                path_val = line[idx + 6:].strip()
+                if path_val.endswith(","):
+                    path_val = path_val[:-1]
+                favorites.add(path_val)
+        return favorites
+    except Exception as e:
+        print(f"[get_system_favorites] failed: {e}")
+        return set()
+
 
 
 def _extract_exif(abs_path: str) -> dict:
@@ -77,7 +122,7 @@ def _on_walk_error(err: OSError) -> None:
     raise err
 
 
-def _scan_filesystem_sync(root: str, existing_snapshot: dict) -> dict:
+def _scan_filesystem_sync(root: str, existing_snapshot: dict, favorites: set) -> dict:
     """Pure synchronous filesystem walk.  No DB access; safe to run in a
     worker thread via asyncio.to_thread.
 
@@ -86,6 +131,7 @@ def _scan_filesystem_sync(root: str, existing_snapshot: dict) -> dict:
         existing_likes    : {photo_id: liked}
         existing_updated_at: {photo_id: updated_at}
         existing_versions : {photo_id: scanner_version}
+        existing_favorites: {photo_id: system_favorite}
         relative_to_id    : {relative_path: photo_id}
 
     Returns a dict with:
@@ -93,6 +139,7 @@ def _scan_filesystem_sync(root: str, existing_snapshot: dict) -> dict:
         to_insert   : list of insert tuples
         to_update_path : list of (abs_path, photo_id)
         to_update_exif : list of (fl, portrait, scene, version, photo_id)
+        to_update_favorite : list of (system_favorite, photo_id)
         scanned     : int
         new         : int
         updated     : int
@@ -101,6 +148,7 @@ def _scan_filesystem_sync(root: str, existing_snapshot: dict) -> dict:
     existing_likes     = existing_snapshot["existing_likes"]
     existing_updated_at = existing_snapshot["existing_updated_at"]
     existing_versions  = existing_snapshot["existing_versions"]
+    existing_favorites  = existing_snapshot.get("existing_favorites", {})
     relative_to_id     = existing_snapshot["relative_to_id"]
 
     now = datetime.now(timezone.utc).isoformat()
@@ -109,6 +157,7 @@ def _scan_filesystem_sync(root: str, existing_snapshot: dict) -> dict:
     to_insert      = []
     to_update_path = []
     to_update_exif = []
+    to_update_favorite = []
     scanned_count  = 0
     new_count      = 0
     updated_count  = 0
@@ -139,6 +188,8 @@ def _scan_filesystem_sync(root: str, existing_snapshot: dict) -> dict:
             found_ids.add(photo_id)
             scanned_count += 1
 
+            is_fav = 1 if abs_path in favorites else 0
+
             if photo_id in existing_paths:
                 # Known photo — check if physical path drifted
                 if existing_paths[photo_id] != abs_path:
@@ -154,6 +205,10 @@ def _scan_filesystem_sync(root: str, existing_snapshot: dict) -> dict:
                         CURRENT_SCANNER_VERSION,
                         photo_id,
                     ))
+
+                # Check if system favorite state changed
+                if existing_favorites.get(photo_id, 0) != is_fav:
+                    to_update_favorite.append((is_fav, photo_id))
             else:
                 # New or replaced photo
                 if rel_path in relative_to_id:
@@ -172,7 +227,7 @@ def _scan_filesystem_sync(root: str, existing_snapshot: dict) -> dict:
                     photo_id, rel_path, abs_path, file_size, mtime,
                     liked_val, updated_at_val, now,
                     exif["focal_length_35mm"], exif["xiaomi_portrait"], exif["xiaomi_scene"],
-                    CURRENT_SCANNER_VERSION,
+                    CURRENT_SCANNER_VERSION, is_fav
                 ))
 
     return {
@@ -180,6 +235,7 @@ def _scan_filesystem_sync(root: str, existing_snapshot: dict) -> dict:
         "to_insert":      to_insert,
         "to_update_path": to_update_path,
         "to_update_exif": to_update_exif,
+        "to_update_favorite": to_update_favorite,
         "scanned":        scanned_count,
         "new":            new_count,
         "updated":        updated_count,
@@ -215,7 +271,7 @@ async def scan_photos(photo_root: str = None, db=None) -> dict:
     # 1. Read existing DB state on the event loop (async, fast)
     # ------------------------------------------------------------------
     cursor = await db.execute(
-        "SELECT photo_id, relative_path, absolute_path, liked, updated_at, scanner_version FROM photos"
+        "SELECT photo_id, relative_path, absolute_path, liked, system_favorite, updated_at, scanner_version FROM photos"
     )
     rows = await cursor.fetchall()
 
@@ -224,14 +280,18 @@ async def scan_photos(photo_root: str = None, db=None) -> dict:
         "existing_likes":      {row["photo_id"]: row["liked"]         for row in rows},
         "existing_updated_at": {row["photo_id"]: row["updated_at"]    for row in rows},
         "existing_versions":   {row["photo_id"]: (row["scanner_version"] or 1) for row in rows},
+        "existing_favorites":  {row["photo_id"]: (row["system_favorite"] or 0) for row in rows},
         "relative_to_id":      {row["relative_path"]: row["photo_id"] for row in rows},
     }
+
+    # Query system favorites from MediaStore
+    favorites = get_system_favorites()
 
     # ------------------------------------------------------------------
     # 2. Walk the filesystem in a worker thread (blocking I/O + CPU)
     # ------------------------------------------------------------------
     try:
-        fs_result = await asyncio.to_thread(_scan_filesystem_sync, root, existing_snapshot)
+        fs_result = await asyncio.to_thread(_scan_filesystem_sync, root, existing_snapshot, favorites)
     except Exception as e:
         return {
             "error": f"Scan failed due to filesystem error: {e}",
@@ -248,6 +308,7 @@ async def scan_photos(photo_root: str = None, db=None) -> dict:
     to_insert      = fs_result["to_insert"]
     to_update_path = fs_result["to_update_path"]
     to_update_exif = fs_result["to_update_exif"]
+    to_update_favorite = fs_result.get("to_update_favorite", [])
 
     # Safety gate: check if scan found 0 photos but DB has existing records
     existing_count = len(existing_snapshot["existing_paths"])
@@ -290,13 +351,18 @@ async def scan_photos(photo_root: str = None, db=None) -> dict:
                WHERE photo_id = ?""",
             to_update_exif,
         )
+    if to_update_favorite:
+        await db.executemany(
+            "UPDATE photos SET system_favorite = ? WHERE photo_id = ?",
+            to_update_favorite,
+        )
     if to_insert:
         await db.executemany(
             """INSERT INTO photos
                (photo_id, relative_path, absolute_path, file_size, mtime,
                 liked, updated_at, indexed_at,
-                focal_length_35mm, xiaomi_portrait, xiaomi_scene, scanner_version)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                focal_length_35mm, xiaomi_portrait, xiaomi_scene, scanner_version, system_favorite)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             to_insert,
         )
 

@@ -13,8 +13,18 @@ export async function fetchCounts() {
         state.counts = data;
         const $countAll = document.getElementById('count-all');
         const $countLiked = document.getElementById('count-liked');
+        const $countSystemFavorite = document.getElementById('count-system-favorite');
+        const $btnSystemFavorite = document.getElementById('btn-filter-system-favorite');
+        
         if ($countAll) $countAll.textContent = data.total ?? 0;
         if ($countLiked) $countLiked.textContent = data.liked ?? 0;
+        
+        if ($btnSystemFavorite) {
+            $btnSystemFavorite.style.display = data.has_system_favorites ? '' : 'none';
+        }
+        if ($countSystemFavorite) {
+            $countSystemFavorite.textContent = data.system_favorite ?? 0;
+        }
     } catch (e) {
         console.error('fetchCounts', e);
     }

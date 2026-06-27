@@ -30,3 +30,9 @@ MAX_PAGE_SIZE = 500
 # Access PIN (4-digit numeric, auto-generated at startup if not set via env)
 # Set ACCESS_PIN env var to use a fixed PIN across restarts
 ACCESS_PIN: str = ""  # populated by main.py at startup
+
+# System Favorites Integration
+# Disabled by default. Only enable when running as a native Android app
+# with MANAGE_MEDIA permission granted by the user.
+ENABLE_SYSTEM_FAVORITES = False
+

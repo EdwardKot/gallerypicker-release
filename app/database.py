@@ -40,6 +40,7 @@ async def init_db(db: aiosqlite.Connection):
             width INTEGER,
             height INTEGER,
             liked INTEGER NOT NULL DEFAULT 0,
+            system_favorite INTEGER NOT NULL DEFAULT 0,
             updated_at TEXT,
             created_at TEXT,
             indexed_at TEXT NOT NULL,
@@ -53,6 +54,8 @@ async def init_db(db: aiosqlite.Connection):
     
     if "liked" not in columns:
         await db.execute("ALTER TABLE photos ADD COLUMN liked INTEGER NOT NULL DEFAULT 0")
+    if "system_favorite" not in columns:
+        await db.execute("ALTER TABLE photos ADD COLUMN system_favorite INTEGER NOT NULL DEFAULT 0")
     if "updated_at" not in columns:
         await db.execute("ALTER TABLE photos ADD COLUMN updated_at TEXT")
     if "focal_length_35mm" not in columns:
@@ -82,6 +85,7 @@ async def init_db(db: aiosqlite.Connection):
         CREATE INDEX IF NOT EXISTS idx_photos_mtime_id ON photos(mtime DESC, photo_id DESC);
         CREATE INDEX IF NOT EXISTS idx_photos_relative_path ON photos(relative_path);
         CREATE INDEX IF NOT EXISTS idx_photos_liked ON photos(liked);
+        CREATE INDEX IF NOT EXISTS idx_photos_system_favorite ON photos(system_favorite);
         CREATE INDEX IF NOT EXISTS idx_photos_focal_length ON photos(focal_length_35mm);
         CREATE INDEX IF NOT EXISTS idx_photos_xiaomi_portrait ON photos(xiaomi_portrait);
     """)
