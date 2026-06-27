@@ -114,7 +114,10 @@ def _scan_filesystem_sync(root: str, existing_snapshot: dict) -> dict:
     new_count      = 0
     updated_count  = 0
 
-    for dirpath, dirnames, filenames in os.walk(root):
+    def _on_walk_error(err):
+        raise err
+
+    for dirpath, dirnames, filenames in os.walk(root, onerror=_on_walk_error):
         # Exclude hidden folders (e.g. .trashed, .thumbnails)
         dirnames[:] = [d for d in dirnames if not d.startswith('.')]
 
@@ -231,7 +234,16 @@ async def scan_photos(photo_root: str = None, db=None) -> dict:
     # ------------------------------------------------------------------
     # 2. Walk the filesystem in a worker thread (blocking I/O + CPU)
     # ------------------------------------------------------------------
-    fs_result = await asyncio.to_thread(_scan_filesystem_sync, root, existing_snapshot)
+    try:
+        fs_result = await asyncio.to_thread(_scan_filesystem_sync, root, existing_snapshot)
+    except Exception as e:
+        return {
+            "error": f"Scan failed due to filesystem error: {e}",
+            "scanned": 0,
+            "new": 0,
+            "updated": 0,
+            "removed": 0,
+        }
 
     # ------------------------------------------------------------------
     # 3. Apply DB changes on the event loop (async, fast)
@@ -240,6 +252,17 @@ async def scan_photos(photo_root: str = None, db=None) -> dict:
     to_insert      = fs_result["to_insert"]
     to_update_path = fs_result["to_update_path"]
     to_update_exif = fs_result["to_update_exif"]
+
+    # Safety gate: check if scan found 0 photos but DB has existing records
+    existing_count = len(existing_snapshot["existing_paths"])
+    if existing_count > 0 and len(found_ids) == 0:
+        return {
+            "error": "Safety gate: scan found 0 photos but DB has existing records — aborting to prevent data wipe",
+            "scanned": 0,
+            "new": 0,
+            "updated": 0,
+            "removed": 0,
+        }
 
     # Records replaced by updated content (same path, new photo_id) must be
     # deleted before the new row is inserted to avoid a PRIMARY KEY conflict.
