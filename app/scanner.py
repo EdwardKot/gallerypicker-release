@@ -73,10 +73,9 @@ def _extract_exif(abs_path: str) -> dict:
     return result
 
 
-# ---------------------------------------------------------------------------
-# Filesystem scan result dataclass (plain dict for simplicity)
-# Returned by _scan_filesystem_sync; consumed by scan_photos on the event loop.
-# ---------------------------------------------------------------------------
+def _on_walk_error(err: OSError) -> None:
+    raise err
+
 
 def _scan_filesystem_sync(root: str, existing_snapshot: dict) -> dict:
     """Pure synchronous filesystem walk.  No DB access; safe to run in a
@@ -113,9 +112,6 @@ def _scan_filesystem_sync(root: str, existing_snapshot: dict) -> dict:
     scanned_count  = 0
     new_count      = 0
     updated_count  = 0
-
-    def _on_walk_error(err):
-        raise err
 
     for dirpath, dirnames, filenames in os.walk(root, onerror=_on_walk_error):
         # Exclude hidden folders (e.g. .trashed, .thumbnails)

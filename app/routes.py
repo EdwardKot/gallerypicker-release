@@ -164,7 +164,6 @@ async def rescan():
     result = await scan_photos()
     if "error" in result:
         raise HTTPException(status_code=400, detail=result["error"])
-    announcer.announce("library_updated")
     return result
 
 
