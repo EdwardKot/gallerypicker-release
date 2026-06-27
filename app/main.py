@@ -12,6 +12,7 @@ from app.config import BASE_DIR, PHOTO_ROOT, HOST, PORT
 from app.database import get_db, close_db
 from app.scanner import scan_photos
 from app.routes import router
+from app.thumbnails import init_thumbnail_cache
 
 
 def _get_local_ip() -> str:
@@ -90,6 +91,9 @@ def _load_or_create_pin() -> str:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # Initialize/validate thumbnail cache directory and version
+    init_thumbnail_cache()
+
     # Load or generate persistent PIN
     config.ACCESS_PIN = _load_or_create_pin()
     local_ip = _get_local_ip()
