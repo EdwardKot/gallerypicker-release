@@ -6,6 +6,7 @@ from pathlib import Path
 from app.config import PHOTO_ROOT, SUPPORTED_EXTENSIONS, ENABLE_SYSTEM_FAVORITES
 from app.utils import compute_photo_id
 from app.database import get_db
+from app.vendor_favorites.registry import favorites_registry
 
 
 # EXIF tag constants
@@ -15,51 +16,6 @@ _TAG_MODEL             = 0x0110
 
 # Scanner rules version (increment when EXIF extraction rules change to force re-scanning of metadata)
 CURRENT_SCANNER_VERSION = 3
-
-
-def get_system_favorites() -> set:
-    """Query system favorites from Android.
-    Returns a set of absolute file paths representing favorited photos.
-    """
-    if not ENABLE_SYSTEM_FAVORITES:
-        return set()
-
-    import subprocess
-    import shutil
-    
-    # Locate the content tool
-    content_cmd = shutil.which("content")
-    if not content_cmd:
-        return set()
-
-    try:
-        # Run direct subprocess call to content query
-        args = [
-            content_cmd, "query",
-            "--uri", "content://media/external/file",
-            "--projection", "_data",
-            "--where", "is_favorite=1"
-        ]
-        res = subprocess.run(args, capture_output=True, text=True, timeout=10)
-        if res.returncode != 0 or not res.stdout:
-            return set()
-
-        favorites = set()
-        for line in res.stdout.splitlines():
-            line = line.strip()
-            if not line.startswith("Row:"):
-                continue
-            idx = line.find("_data=")
-            if idx != -1:
-                path_val = line[idx + 6:].strip()
-                if path_val.endswith(","):
-                    path_val = path_val[:-1]
-                favorites.add(path_val)
-        return favorites
-    except Exception as e:
-        print(f"[get_system_favorites] failed: {e}")
-        return set()
-
 
 
 def _extract_exif(abs_path: str) -> dict:
@@ -283,7 +239,11 @@ async def scan_photos(photo_root: str = None, db=None) -> dict:
     }
 
     # Query system favorites from MediaStore
-    favorites = get_system_favorites()
+    # TODO (Android app): replace "unknown" with the actual device brand so
+    # brand-specific adapters are selected (e.g. SamsungAdapter).
+    favorites = set()
+    if ENABLE_SYSTEM_FAVORITES:
+        favorites = favorites_registry.get_adapter("unknown").read_favorites()
 
     # ------------------------------------------------------------------
     # 2. Walk the filesystem in a worker thread (blocking I/O + CPU)
