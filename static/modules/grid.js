@@ -1,4 +1,6 @@
-import { state, api, apiJson, showToast, setLoading } from './state.js';
+import { state } from './state.js';
+import { apiJson, buildFilteredPath, showToast, setLoading } from './utils.js';
+import { setPhotoLiked } from './photoActions.js';
 let onFocusChangeCallback = null;
 
 export function setOnFocusChange(cb) {
@@ -38,11 +40,10 @@ export async function fetchPhotos(append) {
     state.isLoadingMore = true;
 
     try {
-        const data = await apiJson(
-            `/api/photos?filter=${state.currentFilter}&sort=${state.currentSort}&page=${state.currentPage}&page_size=${state.pageSize}` +
-            (state.focalLength  !== null ? `&focal_length=${state.focalLength}`   : '') +
-            (state.portraitMode !== null ? `&xiaomi_portrait=${state.portraitMode}` : '')
-        );
+        const data = await apiJson(buildFilteredPath('/api/photos', {
+            page: state.currentPage,
+            page_size: state.pageSize,
+        }));
         const newPhotos = data.photos ?? [];
 
         state.totalPhotos = data.total ?? 0;
@@ -346,29 +347,14 @@ export function navigateGrid(direction) {
 
 export function gridLike(photoId) {
     if (!photoId) return;
-    state.likedSet.add(photoId);
-    if (state.likedIdsCache !== null) state.likedIdsCache.push(photoId);
-    const $grid = document.getElementById('photo-grid');
-    const card = $grid ? $grid.querySelector(`.thumb-card[data-photo-id="${photoId}"]`) : null;
-    if (card) card.classList.add('is-liked');
-    api(`/api/like/${photoId}`, { method: 'POST' }).catch(e => console.error('like failed', e));
+    setPhotoLiked(photoId, true, { toast: '♥ Liked' });
     fetchCounts();
-    showToast('♥ Liked');
 }
 
 export function gridUnlike(photoId) {
     if (!photoId) return;
-    state.likedSet.delete(photoId);
-    if (state.likedIdsCache !== null) {
-        const idx = state.likedIdsCache.indexOf(photoId);
-        if (idx >= 0) state.likedIdsCache.splice(idx, 1);
-    }
-    const $grid = document.getElementById('photo-grid');
-    const card = $grid ? $grid.querySelector(`.thumb-card[data-photo-id="${photoId}"]`) : null;
-    if (card) card.classList.remove('is-liked');
-    api(`/api/unlike/${photoId}`, { method: 'POST' }).catch(e => console.error('unlike failed', e));
+    setPhotoLiked(photoId, false, { toast: '♡ Unliked' });
     fetchCounts();
-    showToast('♡ Unliked');
 }
 
 export async function fetchFilters() {

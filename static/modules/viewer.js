@@ -1,12 +1,9 @@
-import { state, api, apiJson, showToast } from './state.js';
+import { state } from './state.js';
+import { apiJson, buildFilteredPath, showToast } from './utils.js';
 import { fetchCounts } from './grid.js';
+import { attachViewerGestures } from './gesture.js';
+import { setPhotoLiked } from './photoActions.js';
 
-let viewerTouchStartX = 0;
-let viewerTouchStartY = 0;
-let viewerTouchStartTime = 0;
-let viewerLastTapTime = 0;
-let viewerIsSwiping = false;
-let viewerSwipeDirection = '';
 let downloadSingleCallback = null;
 
 export function setViewerLikedUI(liked, animate = false) {
@@ -146,13 +143,7 @@ export function loadOriginalForViewer() {
 
 export function updateViewerInfo(photoId) {
     const expectedId = photoId;
-    let url = `/api/photo/${photoId}?filter=${state.currentFilter}&sort=${state.currentSort}`;
-    if (state.focalLength !== null) {
-        url += `&focal_length=${state.focalLength}`;
-    }
-    if (state.portraitMode !== null) {
-        url += `&xiaomi_portrait=${state.portraitMode}`;
-    }
+    const url = buildFilteredPath(`/api/photo/${photoId}`);
 
     const $viewerFilenameBottom = document.getElementById('viewer-filename-bottom');
     const $viewerFilenameTop = document.getElementById('viewer-filename-top');
@@ -227,13 +218,7 @@ export function viewerPrev() {
     } else {
         // Buffer empty – ask the API for the previous ID
         const currentId = state.viewerPhotoId;
-        let url = `/api/photo/${currentId}/prev?filter=${state.currentFilter}&sort=${state.currentSort}`;
-        if (state.focalLength !== null) {
-            url += `&focal_length=${state.focalLength}`;
-        }
-        if (state.portraitMode !== null) {
-            url += `&xiaomi_portrait=${state.portraitMode}`;
-        }
+        const url = buildFilteredPath(`/api/photo/${currentId}/prev`);
         apiJson(url)
             .then(data => {
                 if (state.viewerPhotoId !== currentId) return;
@@ -263,13 +248,7 @@ export function viewerNext() {
     } else {
         // Buffer empty – ask the API for the next ID
         const currentId = state.viewerPhotoId;
-        let url = `/api/photo/${currentId}/next?filter=${state.currentFilter}&sort=${state.currentSort}`;
-        if (state.focalLength !== null) {
-            url += `&focal_length=${state.focalLength}`;
-        }
-        if (state.portraitMode !== null) {
-            url += `&xiaomi_portrait=${state.portraitMode}`;
-        }
+        const url = buildFilteredPath(`/api/photo/${currentId}/next`);
         apiJson(url)
             .then(data => {
                 if (state.viewerPhotoId !== currentId) return;
@@ -309,39 +288,19 @@ export function extendViewerNavFromGrid() {
 
 export async function viewerLike() {
     if (!state.viewerPhotoId) return;
-    const photoId = state.viewerPhotoId;
-
-    state.likedSet.add(photoId);
-    if (state.likedIdsCache !== null) state.likedIdsCache.push(photoId);
-    setViewerLikedUI(true, true);
-
-    const $grid = document.getElementById('photo-grid');
-    const card = $grid ? $grid.querySelector(`.thumb-card[data-photo-id="${photoId}"]`) : null;
-    if (card) card.classList.add('is-liked');
-
-    api(`/api/like/${photoId}`, { method: 'POST' }).catch(e =>
-        console.error('like failed', e)
-    );
+    setPhotoLiked(state.viewerPhotoId, true, {
+        animate: true,
+        updateViewer: setViewerLikedUI,
+    });
+    fetchCounts();
 }
 
 export async function viewerUnlike() {
     if (!state.viewerPhotoId) return;
-    const photoId = state.viewerPhotoId;
-
-    state.likedSet.delete(photoId);
-    if (state.likedIdsCache !== null) {
-        const idx = state.likedIdsCache.indexOf(photoId);
-        if (idx >= 0) state.likedIdsCache.splice(idx, 1);
-    }
-    setViewerLikedUI(false);
-
-    const $grid = document.getElementById('photo-grid');
-    const card = $grid ? $grid.querySelector(`.thumb-card[data-photo-id="${photoId}"]`) : null;
-    if (card) card.classList.remove('is-liked');
-
-    api(`/api/unlike/${photoId}`, { method: 'POST' }).catch(e =>
-        console.error('unlike failed', e)
-    );
+    setPhotoLiked(state.viewerPhotoId, false, {
+        updateViewer: setViewerLikedUI,
+    });
+    fetchCounts();
 }
 
 export function showViewerBars() {
@@ -433,115 +392,20 @@ export function initViewer(callbacks) {
         }
     });
 
-    // Bind touch gestures on $viewerImgContainer
     if ($viewerImgContainer && $viewerImg) {
-        const $viewerTopBar = $viewer.querySelector('.viewer-top-bar');
-        const $viewerBottomBar = $viewer.querySelector('.viewer-bottom-bar');
-        const $viewerCloseBtn = $viewer.querySelector('.viewer-close-btn');
-
-        $viewerImgContainer.addEventListener('touchstart', (e) => {
-            if (!state.isTouch) return;
-            if (e.touches.length !== 1) return;
-
-            viewerTouchStartX = e.touches[0].clientX;
-            viewerTouchStartY = e.touches[0].clientY;
-            viewerTouchStartTime = Date.now();
-            viewerIsSwiping = true;
-            viewerSwipeDirection = '';
-
-            $viewerImg.style.transition = '';
-        }, { passive: true });
-
-        $viewerImgContainer.addEventListener('touchmove', (e) => {
-            if (!state.isTouch || !viewerIsSwiping) return;
-            if (e.touches.length !== 1) return;
-
-            const touch = e.touches[0];
-            const dx = touch.clientX - viewerTouchStartX;
-            const dy = touch.clientY - viewerTouchStartY;
-
-            if (!viewerSwipeDirection) {
-                if (Math.abs(dx) > 10 || Math.abs(dy) > 10) {
-                    viewerSwipeDirection = Math.abs(dx) > Math.abs(dy) ? 'horizontal' : 'vertical';
-                }
-            }
-
-            if (viewerSwipeDirection === 'vertical') {
-                if (dy > 0) {
-                    if (e.cancelable) e.preventDefault();
-                    const scale = Math.max(0.7, 1 - dy / 1000);
-                    $viewerImg.style.transform = `translate3d(0, ${dy}px, 0) scale(${scale})`;
-                    
-                    $viewer.style.backgroundColor = `rgba(0, 0, 0, ${Math.max(0.15, 1 - dy / 400)})`;
-                    if ($viewerTopBar) $viewerTopBar.style.opacity = Math.max(0, 1 - dy / 150);
-                    if ($viewerBottomBar) $viewerBottomBar.style.opacity = Math.max(0, 1 - dy / 150);
-                    if ($viewerCloseBtn) $viewerCloseBtn.style.opacity = Math.max(0, 1 - dy / 150);
-                }
-            } else if (viewerSwipeDirection === 'horizontal') {
-                if (e.cancelable) e.preventDefault();
-                $viewerImg.style.transform = `translate3d(${dx}px, 0, 0)`;
-            }
-        }, { passive: false });
-
-        $viewerImgContainer.addEventListener('touchend', (e) => {
-            if (!state.isTouch) return;
-
-            const dt = Date.now() - viewerTouchStartTime;
-            viewerIsSwiping = false;
-
-            $viewerImg.style.transition = 'transform 0.25s cubic-bezier(0.16, 1, 0.3, 1)';
-
-            const dx = e.changedTouches[0].clientX - viewerTouchStartX;
-            const dy = e.changedTouches[0].clientY - viewerTouchStartY;
-
-            const isTap = Math.sqrt(dx * dx + dy * dy) < 8 && dt < 250;
-            if (isTap) {
-                const now = Date.now();
-                if (now - viewerLastTapTime < 300) {
-                    if (state.viewerPhotoId) {
-                        const liked = state.likedSet.has(state.viewerPhotoId);
-                        if (liked) {
-                            viewerUnlike();
-                        } else {
-                            viewerLike();
-                        }
-                    }
-                    viewerLastTapTime = 0;
+        attachViewerGestures($viewerImgContainer, $viewerImg, $viewer, {
+            isTouch: () => state.isTouch,
+            onSwipeLeft: viewerNext,
+            onSwipeRight: viewerPrev,
+            onSwipeDown: closeViewer,
+            onDoubleTap: () => {
+                if (!state.viewerPhotoId) return;
+                if (state.likedSet.has(state.viewerPhotoId)) {
+                    viewerUnlike();
                 } else {
-                    viewerLastTapTime = now;
+                    viewerLike();
                 }
-            }
-
-            if (viewerSwipeDirection === 'vertical') {
-                if (dy > 120) {
-                    closeViewer();
-                    $viewerImg.style.transform = '';
-                    $viewerImg.style.transition = '';
-                    $viewer.style.backgroundColor = '';
-                    if ($viewerTopBar) $viewerTopBar.style.opacity = '';
-                    if ($viewerBottomBar) $viewerBottomBar.style.opacity = '';
-                    if ($viewerCloseBtn) $viewerCloseBtn.style.opacity = '';
-                } else {
-                    $viewerImg.style.transform = '';
-                    $viewer.style.backgroundColor = '';
-                    if ($viewerTopBar) $viewerTopBar.style.opacity = '';
-                    if ($viewerBottomBar) $viewerBottomBar.style.opacity = '';
-                    if ($viewerCloseBtn) $viewerCloseBtn.style.opacity = '';
-                    setTimeout(() => { $viewerImg.style.transition = ''; }, 250);
-                }
-            } else if (viewerSwipeDirection === 'horizontal') {
-                if (Math.abs(dx) > 60) {
-                    if (dx > 0) {
-                        viewerPrev();
-                    } else {
-                        viewerNext();
-                    }
-                }
-                $viewerImg.style.transform = '';
-                setTimeout(() => { $viewerImg.style.transition = ''; }, 250);
-            }
-
-            viewerSwipeDirection = '';
-        }, { passive: false });
+            },
+        });
     }
 }

@@ -1,4 +1,5 @@
-import { state, showToast, apiJson } from './state.js';
+import { state } from './state.js';
+import { api, apiJson, showToast } from './utils.js';
 
 let downloadAbort = null;
 let downloadProgressTimer = null;
@@ -15,39 +16,44 @@ export function cancelDownload() {
 }
 
 export function downloadWithAnchor(id, filename) {
+    downloadSingleFile(id, filename);
+}
+
+export function getDownloadFilename(resp, id) {
+    const disposition = resp.headers.get('Content-Disposition') || '';
+    const match = disposition.match(/filename[^;=\n]*=["']?([^"';\n]+)["']?/i);
+    const xfn = resp.headers.get('X-Filename');
+    return match ? match[1].trim() : (xfn || `photo_${id}`);
+}
+
+export async function fetchDownloadBlob(id, opts = {}) {
+    const resp = await api(`/api/download/${id}`, opts);
+    const filename = getDownloadFilename(resp, id);
+    const blob = await resp.blob();
+    return { blob, filename };
+}
+
+export function saveBlobWithAnchor(blob, filename) {
+    const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
-    a.href = `/api/download/${id}`;
-    a.download = filename || '';
+    a.href = url;
+    a.download = filename;
     a.style.display = 'none';
     document.body.appendChild(a);
     a.click();
-    setTimeout(() => a.remove(), 100);
+    setTimeout(() => { URL.revokeObjectURL(url); a.remove(); }, 1000);
 }
 
 // Single-file download: fetch as blob then create object URL.
 // This works on Android Chrome (no popup blocker issues) and ensures
 // the file saves rather than opening inline.
-export function downloadSingleFile(id) {
+export function downloadSingleFile(id, filenameOverride = null) {
     showToast('Downloading…');
-    fetch(`/api/download/${id}`)
-        .then(resp => {
-            if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-            const disp = resp.headers.get('Content-Disposition') || '';
-            const match = disp.match(/filename[^;=\n]*=["']?([^"';\n]+)["']?/i);
-            const xfn = resp.headers.get('X-Filename');
-            const filename = match ? match[1].trim() : (xfn || `photo_${id}`);
-            return resp.blob().then(blob => ({ blob, filename }));
-        })
+    fetchDownloadBlob(id)
         .then(({ blob, filename }) => {
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = filename;
-            a.style.display = 'none';
-            document.body.appendChild(a);
-            a.click();
-            setTimeout(() => { URL.revokeObjectURL(url); a.remove(); }, 1000);
-            showToast(`Downloaded: ${filename}`);
+            const downloadName = filenameOverride || filename;
+            saveBlobWithAnchor(blob, downloadName);
+            showToast(`Downloaded: ${downloadName}`);
         })
         .catch(e => {
             console.error('downloadSingleFile', e);
@@ -144,15 +150,10 @@ export async function downloadBulkWithFSAccess(dirHandle, ids) {
     for (const id of ids) {
         if (abort.signal.aborted) break;
         try {
-            const resp = await fetch(`/api/download/${id}`, { signal: abort.signal });
-            if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-            const disposition = resp.headers.get('Content-Disposition') || '';
-            const match = disposition.match(/filename="?([^";\n]+)"?/);
-            let filename = match ? match[1] : `photo_${id}`;
-            filename = getUniqueFilename(filename, existingNames);
+            const { blob, filename: originalFilename } = await fetchDownloadBlob(id, { signal: abort.signal });
+            const filename = getUniqueFilename(originalFilename, existingNames);
             existingNames.add(filename);
 
-            const blob = await resp.blob();
             const fileHandle = await dirHandle.getFileHandle(filename, { create: true });
             const writable = await fileHandle.createWritable();
             await writable.write(blob);
@@ -202,22 +203,8 @@ export async function downloadBulkSync(ids) {
     for (const id of ids) {
         if (abort.signal.aborted) break;
         try {
-            const resp = await fetch(`/api/download/${id}`, { signal: abort.signal });
-            if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-            const disp = resp.headers.get('Content-Disposition') || '';
-            const match = disp.match(/filename[^;=\n]*=["']?([^"';\n]+)["']?/i);
-            const xfn = resp.headers.get('X-Filename');
-            const filename = match ? match[1].trim() : (xfn || `photo_${id}`);
-            const blob = await resp.blob();
-
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = filename;
-            a.style.display = 'none';
-            document.body.appendChild(a);
-            a.click();
-            setTimeout(() => { URL.revokeObjectURL(url); a.remove(); }, 1000);
+            const { blob, filename } = await fetchDownloadBlob(id, { signal: abort.signal });
+            saveBlobWithAnchor(blob, filename);
 
             completed++;
             updateDownloadProgress(completed, ids.length, filename);

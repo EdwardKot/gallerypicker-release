@@ -1,10 +1,12 @@
-import { state, apiJson, showToast } from './state.js';
+import { state } from './state.js';
+import { apiJson, showToast } from './utils.js';
 import { fetchCounts, fetchFilters, fetchPhotos } from './grid.js';
 
 let ptrStartY = 0;
 let ptrPulling = false;
 const PTR_THRESHOLD = 70;
 let onRefreshCallback = null;
+let currentResponsiveLayout = null;
 
 export function openSettings() {
     const $drawerOverlay = document.getElementById('mobile-drawer-overlay');
@@ -32,8 +34,12 @@ export async function refreshCacheStats() {
     }
 }
 
-export function relocateDOM() {
-    const isMobile = window.innerWidth <= 768;
+export function relocateDOM(force = false) {
+    const isMobile = window.matchMedia('(max-width: 768px)').matches;
+    const nextLayout = isMobile ? 'mobile' : 'desktop';
+    if (!force && currentResponsiveLayout === nextLayout) return;
+    currentResponsiveLayout = nextLayout;
+
     const $drawerExif = document.getElementById('drawer-exif-container');
     const $drawerSize = document.getElementById('drawer-size-container');
     const $drawerActions = document.getElementById('drawer-actions-container');
@@ -251,6 +257,12 @@ export function initUI({ onRescan, onRefresh }) {
     document.addEventListener('touchmove', handleTouchMove, { passive: false });
     document.addEventListener('touchend', handleTouchEnd, { passive: true });
 
-    relocateDOM();
-    window.addEventListener('resize', relocateDOM);
+    relocateDOM(true);
+    const layoutQuery = window.matchMedia('(max-width: 768px)');
+    const handleLayoutChange = () => relocateDOM(true);
+    if (layoutQuery.addEventListener) {
+        layoutQuery.addEventListener('change', handleLayoutChange);
+    } else {
+        layoutQuery.addListener(handleLayoutChange);
+    }
 }
