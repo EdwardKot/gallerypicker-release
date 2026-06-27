@@ -264,3 +264,33 @@ async def get_prev_photo_id(
     except AdjacentPhotoNotFound:
         raise HTTPException(status_code=404, detail="Previous photo not found")
     return {"photo_id": prev_photo_id}
+
+
+@router.get("/api/debug/vendor-tag-samples")
+async def get_vendor_tag_samples(tag: str = Query(...)):
+    db = await get_db()
+    cursor = await db.execute("""
+        SELECT photo_id, relative_path, vendor_tags, focal_length_35mm, created_at
+        FROM photos
+        WHERE photo_id IN (
+            SELECT photo_id
+            FROM photo_vendor_tags
+            WHERE tag = :tag
+        )
+    """, {"tag": tag})
+    rows = await cursor.fetchall()
+    
+    samples = []
+    for row in rows:
+        try:
+            v_tags = json.loads(row["vendor_tags"])
+        except Exception:
+            v_tags = []
+        samples.append({
+            "photo_id": row["photo_id"],
+            "relative_path": row["relative_path"],
+            "vendor_tags": v_tags,
+            "focal_length_35mm": row["focal_length_35mm"],
+            "created_at": row["created_at"],
+        })
+    return samples
