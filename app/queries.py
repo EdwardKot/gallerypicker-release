@@ -11,12 +11,10 @@ class PhotoFilters:
     """Typed container for all filter parameters.
     Add new filter fields here as the schema grows.
     """
-    filter_str: str = "all"           # all | liked | unliked
+    filter_str: str = "all"           # all | liked | unliked | system_favorite
     sort_str: str = "newest"          # newest | oldest | name_asc | name_desc
     focal_length: Optional[int] = None
-    xiaomi_portrait: Optional[int] = None
-    # Future: oppo_zoom: Optional[int] = None
-    # Future: realme_mode: Optional[int] = None
+    vendor_tag: Optional[str] = None
 
 
 _SORT_MAP = {
@@ -29,16 +27,16 @@ _SORT_MAP = {
 _DEFAULT_SORT = "mtime DESC, photo_id DESC"
 
 
-def build_filter_sort_sql(f: PhotoFilters) -> tuple[str, str]:
-    """Return (where_clause, order_clause) for use in photo queries.
+def build_filter_sort_sql(f: PhotoFilters) -> tuple[str, str, dict]:
+    """Return (where_clause, order_clause, params_dict) for use in photo queries.
 
     where_clause includes the leading ' WHERE ' token if non-empty, or ''.
     order_clause always includes the leading ' ORDER BY ' token.
     Both are safe to concatenate directly into a query string.
-    Note: focal_length and xiaomi_portrait values are validated as integers
-    by FastAPI before reaching here, so f-string interpolation is safe.
+    Note: focal_length is validated as integer by FastAPI before reaching here.
     """
     conditions = []
+    params = {}
 
     if f.filter_str == "liked":
         conditions.append("liked = 1")
@@ -50,16 +48,10 @@ def build_filter_sort_sql(f: PhotoFilters) -> tuple[str, str]:
     if f.focal_length is not None:
         conditions.append(f"focal_length_35mm = {int(f.focal_length)}")
 
-    if f.xiaomi_portrait is not None:
-        if f.xiaomi_portrait == 0:
-            conditions.append("xiaomi_portrait IN (2, 3)")
-        else:
-            conditions.append(f"xiaomi_portrait = {int(f.xiaomi_portrait)}")
-
-    # Future filters slot in here, same pattern:
-    # if f.oppo_zoom is not None:
-    #     conditions.append(f"oppo_zoom = {int(f.oppo_zoom)}")
+    if f.vendor_tag is not None:
+        conditions.append("photo_id IN (SELECT photo_id FROM photo_vendor_tags WHERE tag = :vendor_tag)")
+        params["vendor_tag"] = f.vendor_tag
 
     where_clause = (" WHERE " + " AND ".join(conditions)) if conditions else ""
     order_clause = f" ORDER BY {_SORT_MAP.get(f.sort_str, _DEFAULT_SORT)}"
-    return where_clause, order_clause
+    return where_clause, order_clause, params

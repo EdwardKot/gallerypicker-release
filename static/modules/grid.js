@@ -371,7 +371,8 @@ export async function fetchFilters() {
     try {
         const data = await apiJson('/api/filters');
         const $filterFocalLength = document.getElementById('filter-focal-length');
-        const $filterPortrait = document.getElementById('filter-portrait');
+        const $filterVendorBrand = document.getElementById('filter-vendor-brand');
+        const $filterVendorTag = document.getElementById('filter-vendor-tag');
 
         if ($filterFocalLength) {
             $filterFocalLength.innerHTML = '<option value="">All focal lengths</option>';
@@ -386,12 +387,56 @@ export async function fetchFilters() {
             });
         }
 
-        if ($filterPortrait) {
-            $filterPortrait.style.display = data.has_xiaomi_portrait ? '' : 'none';
-            if (state.portraitMode !== null) {
-                $filterPortrait.value = state.portraitMode;
+        if ($filterVendorBrand) {
+            $filterVendorBrand.innerHTML = '<option value="">All brands</option>';
+            const brands = data.vendor_brands || [];
+            if (brands.length > 0) {
+                $filterVendorBrand.style.display = '';
+                brands.forEach(b => {
+                    const opt = document.createElement('option');
+                    opt.value = `brand:${b.brand}`;
+                    opt.textContent = `${b.label} (${b.count})`;
+                    if (state.vendorTag === opt.value) {
+                        opt.selected = true;
+                    }
+                    $filterVendorBrand.appendChild(opt);
+                });
             } else {
-                $filterPortrait.value = '';
+                $filterVendorBrand.style.display = 'none';
+            }
+        }
+
+        if ($filterVendorTag) {
+            $filterVendorTag.innerHTML = '<option value="">All tags</option>';
+            const tags = data.vendor_tags || [];
+            if (tags.length > 0) {
+                $filterVendorTag.style.display = '';
+                
+                // Group tags by group
+                const groups = {};
+                tags.forEach(t => {
+                    if (!groups[t.group]) {
+                        groups[t.group] = [];
+                    }
+                    groups[t.group].push(t);
+                });
+
+                Object.entries(groups).forEach(([groupName, groupTags]) => {
+                    const optgroup = document.createElement('optgroup');
+                    optgroup.label = groupName;
+                    groupTags.forEach(t => {
+                        const opt = document.createElement('option');
+                        opt.value = t.tag;
+                        opt.textContent = `${t.label} (${t.count})`;
+                        if (state.vendorTag === t.tag) {
+                            opt.selected = true;
+                        }
+                        optgroup.appendChild(opt);
+                    });
+                    $filterVendorTag.appendChild(optgroup);
+                });
+            } else {
+                $filterVendorTag.style.display = 'none';
             }
         }
     } catch (e) {
@@ -422,12 +467,29 @@ export function initGrid() {
         });
     }
 
-    // 4. Bind #filter-portrait change
-    const $filterPortrait = document.getElementById('filter-portrait');
-    if ($filterPortrait) {
-        $filterPortrait.addEventListener('change', () => {
-            const val = $filterPortrait.value;
-            state.portraitMode = val !== '' ? parseInt(val, 10) : null;
+    // 4. Bind #filter-vendor-brand and #filter-vendor-tag changes
+    const $filterVendorBrand = document.getElementById('filter-vendor-brand');
+    const $filterVendorTag = document.getElementById('filter-vendor-tag');
+
+    if ($filterVendorBrand) {
+        $filterVendorBrand.addEventListener('change', () => {
+            const val = $filterVendorBrand.value;
+            state.vendorTag = val !== '' ? val : null;
+            if ($filterVendorTag) {
+                $filterVendorTag.value = '';
+            }
+            state.focusedPhotoId = null;
+            fetchPhotos();
+        });
+    }
+
+    if ($filterVendorTag) {
+        $filterVendorTag.addEventListener('change', () => {
+            const val = $filterVendorTag.value;
+            state.vendorTag = val !== '' ? val : null;
+            if ($filterVendorBrand) {
+                $filterVendorBrand.value = '';
+            }
             state.focusedPhotoId = null;
             fetchPhotos();
         });

@@ -26,7 +26,7 @@ export const state = {
     hasMorePages: true,
     likedIdsCache: null,    // 预缓存的 liked 照片 ID 列表
     focalLength: null,      // active focal length filter (integer or null)
-    portraitMode: null,     // active xiaomi portrait filter (integer or null)
+    vendorTag: null,        // active vendor tag filter (string or null)
     unauthorized: false,
     isTouch: (function () {
         if (typeof window === 'undefined') return false;

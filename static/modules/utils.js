@@ -19,7 +19,7 @@ export function buildFilteredPath(path, params = {}) {
         filter: state.currentFilter,
         sort: state.currentSort,
         focal_length: state.focalLength,
-        xiaomi_portrait: state.portraitMode,
+        vendor_tag: state.vendorTag,
         ...params,
     });
 }

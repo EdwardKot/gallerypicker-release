@@ -2,6 +2,7 @@ import os
 import asyncio
 import mimetypes
 from fastapi import APIRouter, Query, HTTPException
+from typing import Optional
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 import json
 from app.database import get_db
@@ -32,11 +33,10 @@ async def list_photos(
     page: int = Query(1, ge=1),
     page_size: int = Query(DEFAULT_PAGE_SIZE, ge=1),
     focal_length: int = Query(None),
-    xiaomi_portrait: int = Query(None),
-    vendor_tag: str = Query(None),
+    vendor_tag: Optional[str] = Query(None),
 ):
     db = await get_db()
-    filters = build_photo_filters(filter, sort, focal_length, xiaomi_portrait, vendor_tag)
+    filters = build_photo_filters(filter, sort, focal_length, vendor_tag)
     content = await service_list_photos(db, filters, page, page_size)
 
     return JSONResponse(
@@ -60,13 +60,12 @@ async def get_photo(
     filter: str = Query(None, pattern="^(all|liked|unliked|system_favorite)$"),
     sort: str = Query(None, pattern="^(newest|oldest|name_asc|name_desc)$"),
     focal_length: int = Query(None),
-    xiaomi_portrait: int = Query(None),
-    vendor_tag: str = Query(None),
+    vendor_tag: Optional[str] = Query(None),
 ):
     db = await get_db()
     filters = None
     if filter and sort:
-        filters = build_photo_filters(filter, sort, focal_length, xiaomi_portrait, vendor_tag)
+        filters = build_photo_filters(filter, sort, focal_length, vendor_tag)
 
     try:
         return await get_photo_detail(db, photo_id, filters)
@@ -239,11 +238,10 @@ async def get_next_photo_id(
     filter: str = Query("all", pattern="^(all|liked|unliked|system_favorite)$"),
     sort: str = Query("newest", pattern="^(newest|oldest|name_asc|name_desc)$"),
     focal_length: int = Query(None),
-    xiaomi_portrait: int = Query(None),
-    vendor_tag: str = Query(None),
+    vendor_tag: Optional[str] = Query(None),
 ):
     db = await get_db()
-    filters = build_photo_filters(filter, sort, focal_length, xiaomi_portrait, vendor_tag)
+    filters = build_photo_filters(filter, sort, focal_length, vendor_tag)
     try:
         next_photo_id = await service_get_adjacent_photo_id(db, photo_id, filters, "next")
     except AdjacentPhotoNotFound:
@@ -257,11 +255,10 @@ async def get_prev_photo_id(
     filter: str = Query("all", pattern="^(all|liked|unliked|system_favorite)$"),
     sort: str = Query("newest", pattern="^(newest|oldest|name_asc|name_desc)$"),
     focal_length: int = Query(None),
-    xiaomi_portrait: int = Query(None),
-    vendor_tag: str = Query(None),
+    vendor_tag: Optional[str] = Query(None),
 ):
     db = await get_db()
-    filters = build_photo_filters(filter, sort, focal_length, xiaomi_portrait, vendor_tag)
+    filters = build_photo_filters(filter, sort, focal_length, vendor_tag)
     try:
         prev_photo_id = await service_get_adjacent_photo_id(db, photo_id, filters, "prev")
     except AdjacentPhotoNotFound:

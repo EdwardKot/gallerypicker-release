@@ -11,12 +11,10 @@ from app.database import get_db
 # EXIF tag constants
 _TAG_FOCAL_LENGTH_35MM = 0xA405
 _TAG_MAKE              = 0x010F
-_TAG_MAKER_NOTE        = 0x927C
-_TAG_XIAOMI_PORTRAIT   = 0x889F
-_TAG_XIAOMI_SCENE      = 0x8889
+_TAG_MODEL             = 0x0110
 
 # Scanner rules version (increment when EXIF extraction rules change to force re-scanning of metadata)
-CURRENT_SCANNER_VERSION = 2
+CURRENT_SCANNER_VERSION = 3
 
 
 def get_system_favorites() -> set:
@@ -66,12 +64,17 @@ def get_system_favorites() -> set:
 
 def _extract_exif(abs_path: str) -> dict:
     """Extract EXIF fields we care about. Returns a dict with keys:
-      focal_length_35mm, xiaomi_portrait, xiaomi_scene  (all may be None)
-    Only attempts Xiaomi private tags when Make == 'Xiaomi'.
+      focal_length_35mm (int or None), vendor_tags (list of str), tag_records (list of tuple)
     Fast: reads only the EXIF header, never decodes image pixels."""
-    result = {"focal_length_35mm": None, "xiaomi_portrait": None, "xiaomi_scene": None}
+    result = {
+        "focal_length_35mm": None,
+        "vendor_tags": [],
+        "tag_records": []
+    }
     try:
         from PIL import Image
+        from app.vendor_metadata.registry import registry
+
         with Image.open(abs_path) as img:
             exif = img.getexif()
             if not exif:
@@ -92,29 +95,19 @@ def _extract_exif(abs_path: str) -> dict:
                 except (TypeError, ValueError):
                     pass
 
-            # Xiaomi private tags — only attempt for Xiaomi-family bodies
-            make = (exif.get(_TAG_MAKE) or "").strip().lower()
-            if exif_sub and ("xiaomi" in make or "redmi" in make or "poco" in make):
-                try:
-                    portrait = exif_sub.get(_TAG_XIAOMI_PORTRAIT)
-                    scene    = exif_sub.get(_TAG_XIAOMI_SCENE)
+            # Make and Model (Make is 0x010F, Model is 0x0110)
+            make = (exif.get(_TAG_MAKE) or "").strip()
+            model = (exif.get(_TAG_MODEL) or "").strip()
 
-                    if portrait is not None:
-                        if isinstance(portrait, bytes) and len(portrait) > 0:
-                            result["xiaomi_portrait"] = int(portrait[0])
-                        elif isinstance(portrait, (int, float)):
-                            result["xiaomi_portrait"] = int(portrait)
-
-                    if scene is not None:
-                        if isinstance(scene, bytes) and len(scene) > 0:
-                            result["xiaomi_scene"] = int(scene[0])
-                        elif isinstance(scene, (int, float)):
-                            result["xiaomi_scene"] = int(scene)
-                except Exception:
-                    pass  # Non-fatal
-
-    except Exception:
-        pass  # Unreadable EXIF is non-fatal
+            extractor = registry.get_extractor(make, model)
+            if extractor:
+                records = extractor.extract(exif, exif_sub)
+                # tag_records deduplication using sorted(set(...)) to prevent PK conflicts
+                deduped_records = sorted(set(records))
+                result["tag_records"] = deduped_records
+                result["vendor_tags"] = sorted({tag for tag, source in deduped_records})
+    except Exception as e:
+        print(f"[_extract_exif] failed for {abs_path}: {e}")
     return result
 
 
@@ -138,12 +131,14 @@ def _scan_filesystem_sync(root: str, existing_snapshot: dict, favorites: set) ->
         found_ids   : set of photo_id strings found on disk
         to_insert   : list of insert tuples
         to_update_path : list of (abs_path, photo_id)
-        to_update_exif : list of (fl, portrait, scene, version, photo_id)
+        to_update_exif : list of (fl, vendor_tags_str, version, photo_id)
         to_update_favorite : list of (system_favorite, photo_id)
+        photo_tag_records : dict of {photo_id: list of (tag, source)}
         scanned     : int
         new         : int
         updated     : int
     """
+    import json
     existing_paths     = existing_snapshot["existing_paths"]
     existing_likes     = existing_snapshot["existing_likes"]
     existing_updated_at = existing_snapshot["existing_updated_at"]
@@ -158,6 +153,7 @@ def _scan_filesystem_sync(root: str, existing_snapshot: dict, favorites: set) ->
     to_update_path = []
     to_update_exif = []
     to_update_favorite = []
+    photo_tag_records = {}
     scanned_count  = 0
     new_count      = 0
     updated_count  = 0
@@ -200,11 +196,11 @@ def _scan_filesystem_sync(root: str, existing_snapshot: dict, favorites: set) ->
                     exif = _extract_exif(abs_path)
                     to_update_exif.append((
                         exif["focal_length_35mm"],
-                        exif["xiaomi_portrait"],
-                        exif["xiaomi_scene"],
+                        json.dumps(exif["vendor_tags"]),
                         CURRENT_SCANNER_VERSION,
                         photo_id,
                     ))
+                    photo_tag_records[photo_id] = exif["tag_records"]
 
                 # Check if system favorite state changed
                 if existing_favorites.get(photo_id, 0) != is_fav:
@@ -226,9 +222,10 @@ def _scan_filesystem_sync(root: str, existing_snapshot: dict, favorites: set) ->
                 to_insert.append((
                     photo_id, rel_path, abs_path, file_size, mtime,
                     liked_val, updated_at_val, now,
-                    exif["focal_length_35mm"], exif["xiaomi_portrait"], exif["xiaomi_scene"],
+                    exif["focal_length_35mm"], json.dumps(exif["vendor_tags"]),
                     CURRENT_SCANNER_VERSION, is_fav
                 ))
+                photo_tag_records[photo_id] = exif["tag_records"]
 
     return {
         "found_ids":      found_ids,
@@ -236,6 +233,7 @@ def _scan_filesystem_sync(root: str, existing_snapshot: dict, favorites: set) ->
         "to_update_path": to_update_path,
         "to_update_exif": to_update_exif,
         "to_update_favorite": to_update_favorite,
+        "photo_tag_records": photo_tag_records,
         "scanned":        scanned_count,
         "new":            new_count,
         "updated":        updated_count,
@@ -346,11 +344,15 @@ async def scan_photos(photo_root: str = None, db=None) -> dict:
     if to_update_exif:
         await db.executemany(
             """UPDATE photos
-               SET focal_length_35mm = ?, xiaomi_portrait = ?, xiaomi_scene = ?,
+               SET focal_length_35mm = ?, vendor_tags = ?,
                    scanner_version = ?
                WHERE photo_id = ?""",
             to_update_exif,
         )
+        # Delete old tag indexing records for updated EXIF photos
+        updated_ids = [(row[3],) for row in to_update_exif]
+        await db.executemany("DELETE FROM photo_vendor_tags WHERE photo_id = ?", updated_ids)
+
     if to_update_favorite:
         await db.executemany(
             "UPDATE photos SET system_favorite = ? WHERE photo_id = ?",
@@ -361,9 +363,31 @@ async def scan_photos(photo_root: str = None, db=None) -> dict:
             """INSERT INTO photos
                (photo_id, relative_path, absolute_path, file_size, mtime,
                 liked, updated_at, indexed_at,
-                focal_length_35mm, xiaomi_portrait, xiaomi_scene, scanner_version, system_favorite)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                focal_length_35mm, vendor_tags, scanner_version, system_favorite)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             to_insert,
+        )
+
+    # Insert new photo_vendor_tags indexing records in bulk
+    new_tag_records = []
+    photo_tag_records = fs_result.get("photo_tag_records", {})
+    # For to_insert, photo_id is index 0
+    for record in to_insert:
+        photo_id = record[0]
+        records = photo_tag_records.get(photo_id, [])
+        for tag, source in records:
+            new_tag_records.append((photo_id, tag, source))
+    # For to_update_exif, photo_id is index 3
+    for record in to_update_exif:
+        photo_id = record[3]
+        records = photo_tag_records.get(photo_id, [])
+        for tag, source in records:
+            new_tag_records.append((photo_id, tag, source))
+
+    if new_tag_records:
+        await db.executemany(
+            "INSERT INTO photo_vendor_tags (photo_id, tag, source) VALUES (?, ?, ?)",
+            new_tag_records,
         )
 
     await db.commit()

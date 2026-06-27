@@ -47,9 +47,11 @@ export function relocateDOM(force = false) {
     if (isMobile) {
         if ($drawerExif) {
             const focalLength = document.getElementById('filter-focal-length');
-            const portrait = document.getElementById('filter-portrait');
+            const brand = document.getElementById('filter-vendor-brand');
+            const tag = document.getElementById('filter-vendor-tag');
             if (focalLength) $drawerExif.appendChild(focalLength);
-            if (portrait) $drawerExif.appendChild(portrait);
+            if (brand) $drawerExif.appendChild(brand);
+            if (tag) $drawerExif.appendChild(tag);
         }
         if ($drawerSize) {
             const sizeControl = document.querySelector('.thumb-size-control');
@@ -65,9 +67,11 @@ export function relocateDOM(force = false) {
         const headerCenter = document.querySelector('.exif-filters');
         if (headerCenter) {
             const focalLength = document.getElementById('filter-focal-length');
-            const portrait = document.getElementById('filter-portrait');
+            const brand = document.getElementById('filter-vendor-brand');
+            const tag = document.getElementById('filter-vendor-tag');
             if (focalLength) headerCenter.appendChild(focalLength);
-            if (portrait) headerCenter.appendChild(portrait);
+            if (brand) headerCenter.appendChild(brand);
+            if (tag) headerCenter.appendChild(tag);
         }
         const headerRight = document.querySelector('.header-right');
         if (headerRight) {

@@ -14,27 +14,17 @@ class AdjacentPhotoNotFound(Exception):
     pass
 
 
-def parse_vendor_tag(vendor_tag: Optional[str]) -> Optional[int]:
-    if vendor_tag in ("xiaomi_portrait=0", "xiaomi_portrait=2", "xiaomi_portrait=3"):
-        return int(vendor_tag.split("=")[1])
-    return None
-
-
 def build_photo_filters(
     filter_str: str = "all",
     sort_str: str = "newest",
     focal_length: Optional[int] = None,
-    xiaomi_portrait: Optional[int] = None,
     vendor_tag: Optional[str] = None,
 ) -> PhotoFilters:
-    if vendor_tag and xiaomi_portrait is None:
-        xiaomi_portrait = parse_vendor_tag(vendor_tag)
-
     return PhotoFilters(
         filter_str=filter_str,
         sort_str=sort_str,
         focal_length=focal_length,
-        xiaomi_portrait=xiaomi_portrait,
+        vendor_tag=vendor_tag,
     )
 
 
@@ -71,9 +61,9 @@ def _cap_page_size(filter_str: str, page_size: int) -> int:
 
 async def list_photos(db, filters: PhotoFilters, page: int, page_size: int) -> dict:
     page_size = _cap_page_size(filters.filter_str, page_size)
-    where, order = build_filter_sort_sql(filters)
+    where, order, params = build_filter_sort_sql(filters)
 
-    cursor = await db.execute(f"SELECT COUNT(*) FROM photos{where}")
+    cursor = await db.execute(f"SELECT COUNT(*) FROM photos{where}", params)
     row = await cursor.fetchone()
     total = row[0]
 
@@ -82,9 +72,11 @@ async def list_photos(db, filters: PhotoFilters, page: int, page_size: int) -> d
         "SELECT photo_id, relative_path, file_size, mtime, liked FROM photos"
         + where
         + order
-        + " LIMIT ? OFFSET ?"
+        + " LIMIT :limit OFFSET :offset"
     )
-    cursor = await db.execute(query, [page_size, offset])
+    full_params = dict(params)
+    full_params.update({"limit": page_size, "offset": offset})
+    cursor = await db.execute(query, full_params)
     rows = await cursor.fetchall()
 
     return {
@@ -104,27 +96,51 @@ async def get_available_filters(db) -> dict:
     focal_lengths = [row[0] for row in await cursor.fetchall()]
 
     cursor = await db.execute(
-        "SELECT COUNT(*) FROM photos WHERE xiaomi_portrait IN (2, 3)"
+        "SELECT tag, COUNT(*) as cnt FROM photo_vendor_tags GROUP BY tag"
     )
-    xiaomi_count = (await cursor.fetchone())[0]
+    rows = await cursor.fetchall()
 
-    available_vendor_tags = []
-    if xiaomi_count > 0:
-        available_vendor_tags = [
-            {"id": "xiaomi_portrait=0", "display_name": "All Portrait (人像模式)", "vendor": "Xiaomi"},
-            {"id": "xiaomi_portrait=2", "display_name": "Master Portrait (大师人像)", "vendor": "Xiaomi"},
-            {"id": "xiaomi_portrait=3", "display_name": "Leica Portrait (徕卡人像)", "vendor": "Xiaomi"},
-        ]
+    from app.vendor_metadata.tag_registry import tag_registry
+
+    vendor_brands_map = {}
+    vendor_tags = []
+
+    for row in rows:
+        tag = row["tag"]
+        count = row["cnt"]
+        tag_def = tag_registry.get(tag)
+
+        if tag.startswith("brand:"):
+            brand_id = tag_def.brand
+            if brand_id not in vendor_brands_map:
+                vendor_brands_map[brand_id] = {
+                    "brand": brand_id,
+                    "label": tag_def.label,
+                    "count": 0
+                }
+            vendor_brands_map[brand_id]["count"] += count
+        else:
+            vendor_tags.append({
+                "tag": tag_def.tag,
+                "label": tag_def.label,
+                "group": tag_def.group,
+                "brand": tag_def.brand,
+                "count": count,
+                "display_order": tag_def.display_order
+            })
+
+    vendor_brands = sorted(vendor_brands_map.values(), key=lambda x: x["brand"])
+    vendor_tags = sorted(vendor_tags, key=lambda x: (x["display_order"], x["tag"]))
 
     return {
         "focal_lengths": focal_lengths,
-        "has_xiaomi_portrait": xiaomi_count > 0,
-        "available_vendor_tags": available_vendor_tags,
+        "vendor_brands": vendor_brands,
+        "vendor_tags": vendor_tags,
     }
 
 
 async def get_neighbor_context(db, photo_id: str, filters: PhotoFilters) -> dict:
-    where_clause, order_clause = build_filter_sort_sql(filters)
+    where_clause, order_clause, params = build_filter_sort_sql(filters)
     query = f"""
         WITH ordered AS (
             SELECT photo_id,
@@ -135,14 +151,16 @@ async def get_neighbor_context(db, photo_id: str, filters: PhotoFilters) -> dict
         target AS (
             SELECT row_num, (SELECT COUNT(*) FROM ordered) as total
             FROM ordered
-            WHERE photo_id = ?
+            WHERE photo_id = :target_photo_id
         )
         SELECT o.photo_id, o.row_num, t.row_num as target_row_num, t.total
         FROM ordered o
         CROSS JOIN target t
         WHERE o.row_num BETWEEN t.row_num - 3 AND t.row_num + 3
     """
-    cursor = await db.execute(query, (photo_id,))
+    full_params = dict(params)
+    full_params["target_photo_id"] = photo_id
+    cursor = await db.execute(query, full_params)
     neighbor_rows = await cursor.fetchall()
 
     prev_ids = []
@@ -258,7 +276,7 @@ async def get_adjacent_photo_id(
     direction: str,
 ) -> str:
     offset = 1 if direction == "next" else -1
-    where_clause, order_clause = build_filter_sort_sql(filters)
+    where_clause, order_clause, params = build_filter_sort_sql(filters)
     query = f"""
         WITH ordered AS (
             SELECT photo_id,
@@ -267,14 +285,17 @@ async def get_adjacent_photo_id(
             {where_clause}
         ),
         target AS (
-            SELECT row_num FROM ordered WHERE photo_id = ?
+            SELECT row_num FROM ordered WHERE photo_id = :target_photo_id
         )
         SELECT o.photo_id
         FROM ordered o
         CROSS JOIN target t
-        WHERE o.row_num = t.row_num + ?
+        WHERE o.row_num = t.row_num + :offset
     """
-    cursor = await db.execute(query, (photo_id, offset))
+    full_params = dict(params)
+    full_params["target_photo_id"] = photo_id
+    full_params["offset"] = offset
+    cursor = await db.execute(query, full_params)
     row = await cursor.fetchone()
     if not row:
         raise AdjacentPhotoNotFound()
