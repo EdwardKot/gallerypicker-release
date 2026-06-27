@@ -371,7 +371,6 @@ export async function fetchFilters() {
     try {
         const data = await apiJson('/api/filters');
         const $filterFocalLength = document.getElementById('filter-focal-length');
-        const $filterVendorBrand = document.getElementById('filter-vendor-brand');
         const $filterVendorTag = document.getElementById('filter-vendor-tag');
 
         if ($filterFocalLength) {
@@ -385,25 +384,6 @@ export async function fetchFilters() {
                 }
                 $filterFocalLength.appendChild(opt);
             });
-        }
-
-        if ($filterVendorBrand) {
-            $filterVendorBrand.innerHTML = '<option value="">All brands</option>';
-            const brands = data.vendor_brands || [];
-            if (brands.length > 0) {
-                $filterVendorBrand.style.display = '';
-                brands.forEach(b => {
-                    const opt = document.createElement('option');
-                    opt.value = `brand:${b.brand}`;
-                    opt.textContent = `${b.label} (${b.count})`;
-                    if (state.vendorTag === opt.value) {
-                        opt.selected = true;
-                    }
-                    $filterVendorBrand.appendChild(opt);
-                });
-            } else {
-                $filterVendorBrand.style.display = 'none';
-            }
         }
 
         if ($filterVendorTag) {
@@ -467,29 +447,13 @@ export function initGrid() {
         });
     }
 
-    // 4. Bind #filter-vendor-brand and #filter-vendor-tag changes
-    const $filterVendorBrand = document.getElementById('filter-vendor-brand');
+    // 4. Bind #filter-vendor-tag changes
     const $filterVendorTag = document.getElementById('filter-vendor-tag');
-
-    if ($filterVendorBrand) {
-        $filterVendorBrand.addEventListener('change', () => {
-            const val = $filterVendorBrand.value;
-            state.vendorTag = val !== '' ? val : null;
-            if ($filterVendorTag) {
-                $filterVendorTag.value = '';
-            }
-            state.focusedPhotoId = null;
-            fetchPhotos();
-        });
-    }
 
     if ($filterVendorTag) {
         $filterVendorTag.addEventListener('change', () => {
             const val = $filterVendorTag.value;
             state.vendorTag = val !== '' ? val : null;
-            if ($filterVendorBrand) {
-                $filterVendorBrand.value = '';
-            }
             state.focusedPhotoId = null;
             fetchPhotos();
         });

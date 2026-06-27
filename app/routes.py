@@ -46,12 +46,12 @@ async def list_photos(
 
 
 @router.get("/api/filters")
-async def get_filters():
+async def get_filters(show_raw: bool = Query(False)):
     """Return available filter options derived from the indexed library.
     focal_lengths: sorted list of distinct 35mm-equivalent focal lengths found.
-    has_xiaomi_portrait: true if any photo has xiaomi_portrait IN (2,3)."""
+    vendor_tags: user-facing tag labels/groups while preserving original tag values."""
     db = await get_db()
-    return await get_available_filters(db)
+    return await get_available_filters(db, show_raw=show_raw)
 
 
 @router.get("/api/photo/{photo_id}")

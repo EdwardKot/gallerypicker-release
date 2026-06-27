@@ -88,7 +88,7 @@ async def list_photos(db, filters: PhotoFilters, page: int, page_size: int) -> d
     }
 
 
-async def get_available_filters(db) -> dict:
+async def get_available_filters(db, show_raw: bool = False) -> dict:
     cursor = await db.execute(
         "SELECT DISTINCT focal_length_35mm FROM photos "
         "WHERE focal_length_35mm IS NOT NULL ORDER BY focal_length_35mm ASC"
@@ -100,6 +100,7 @@ async def get_available_filters(db) -> dict:
     )
     rows = await cursor.fetchall()
 
+    from app.vendor_metadata.presentation import TagPresentation
     from app.vendor_metadata.tag_registry import tag_registry
 
     vendor_brands_map = {}
@@ -109,24 +110,28 @@ async def get_available_filters(db) -> dict:
         tag = row["tag"]
         count = row["cnt"]
         tag_def = tag_registry.get(tag)
+        tag_presentation = TagPresentation.from_definition(tag_def, show_raw=show_raw)
 
         if tag.startswith("brand:"):
             brand_id = tag_def.brand
             if brand_id not in vendor_brands_map:
                 vendor_brands_map[brand_id] = {
                     "brand": brand_id,
-                    "label": tag_def.label,
+                    "label": tag_presentation.label,
                     "count": 0
                 }
             vendor_brands_map[brand_id]["count"] += count
         else:
+            if not tag_presentation.visible:
+                continue
+
             vendor_tags.append({
-                "tag": tag_def.tag,
-                "label": tag_def.label,
-                "group": tag_def.group,
+                "tag": tag,
+                "label": tag_presentation.label,
+                "group": tag_presentation.group,
                 "brand": tag_def.brand,
                 "count": count,
-                "display_order": tag_def.display_order
+                "display_order": tag_presentation.display_order
             })
 
     vendor_brands = sorted(vendor_brands_map.values(), key=lambda x: x["brand"])
